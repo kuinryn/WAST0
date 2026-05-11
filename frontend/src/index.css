@@ -21,8 +21,9 @@
 * { box-sizing: border-box; }
 
 body {
-  font-family: 'DM Sans', sans-serif;
-  background-color: var(--cream);
+  font-family: 'Inter', sans-serif;
+  background-color: #f9fafb;
+  color: #111827;
   color: var(--slate-900);
   -webkit-font-smoothing: antialiased;
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/axios'
-import ScheduleTable from '../components/ScheduleTable'
+import ScheduleTable, { BarangayICalButton } from '../components/ScheduleTable'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { useAuth } from '../context/AuthContext'
 
@@ -39,7 +39,7 @@ export default function GuestScheduleView() {
                         Waste Collection Schedules
                     </h1>
                     <p className="animate-fade-up delay-200" style={{ fontSize: 15, color: '#86efac', margin: '0 0 28px' }}>
-                        Select your barangay below to view the waste collection schedule for your area.
+                        Select your barangay below to view the schedule and add it directly to your calendar.
                     </p>
                     <div className="animate-fade-up delay-300" style={{ position: 'relative', maxWidth: 420, margin: '0 auto' }}>
                         <select
@@ -113,7 +113,7 @@ export default function GuestScheduleView() {
                     <LoadingSpinner />
                 ) : (
                     <>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
                             <div>
                                 <h2 style={{ fontFamily: 'DM Serif Display, serif', fontSize: 26, color: '#0f172a', margin: '0 0 4px' }}>
                                     Barangay {selectedName}
@@ -122,19 +122,39 @@ export default function GuestScheduleView() {
                                     {schedules.length} collection schedule{schedules.length !== 1 ? 's' : ''} found
                                 </p>
                             </div>
-                            {!user && (
-                                <Link to="/register" style={{
-                                    fontSize: 13, fontWeight: 600, color: 'white',
-                                    background: '#14532d', padding: '9px 18px', borderRadius: 10,
-                                    textDecoration: 'none',
-                                }}>Get Weather Alerts →</Link>
-                            )}
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                {schedules.length > 0 && (
+                                    <BarangayICalButton barangayId={selectedBarangay} barangayName={selectedName} />
+                                )}
+                                {!user && (
+                                    <Link to="/register" style={{
+                                        fontSize: 13, fontWeight: 600, color: 'white',
+                                        background: '#14532d', padding: '9px 18px', borderRadius: 10,
+                                        textDecoration: 'none',
+                                    }}>Get Weather Alerts →</Link>
+                                )}
+                            </div>
                         </div>
+
+                        {/* Calendar tip */}
+                        {schedules.length > 0 && (
+                            <div style={{
+                                background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10,
+                                padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#15803d',
+                                display: 'flex', alignItems: 'center', gap: 8,
+                            }}>
+                                <span>💡</span>
+                                <span>
+                                    Each schedule has a <strong>Google Cal</strong> button to add a recurring reminder to your Google Calendar,
+                                    or <strong>.ics</strong> to import into Apple Calendar, Outlook, or any calendar app.
+                                </span>
+                            </div>
+                        )}
+
                         <ScheduleTable schedules={schedules} canEdit={false} />
                     </>
                 )}
             </div>
-
         </div>
     )
 }

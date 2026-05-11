@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
-import ScheduleTable from '../components/ScheduleTable'
+import ScheduleTable, { BarangayICalButton } from '../components/ScheduleTable'
 import WeatherAlertBanner from '../components/WeatherAlertBanner'
 import LoadingSpinner from '../components/LoadingSpinner'
 
@@ -40,7 +40,7 @@ export default function ResidentDashboard() {
             Hello, {user?.name?.split(' ')[0]} 👋
           </h1>
           <p style={{ fontSize: 14, color: '#86efac', margin: 0 }}>
-            Here's your barangay's waste collection schedule and weather alerts.
+            Here's your barangay's waste collection schedule. Add reminders to your calendar below.
           </p>
         </div>
       </div>
@@ -76,12 +76,20 @@ export default function ResidentDashboard() {
 
         {/* Schedule */}
         <div className="card" style={{ padding: 28 }}>
-          <h2 style={{ fontFamily: 'DM Serif Display, serif', fontSize: 22, color: '#0f172a', margin: '0 0 6px' }}>
-            Collection Schedule
-          </h2>
-          <p style={{ fontSize: 13, color: '#94a3b8', margin: '0 0 20px' }}>
-            Your barangay's current waste collection timetable
-          </p>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <h2 style={{ fontFamily: 'DM Serif Display, serif', fontSize: 22, color: '#0f172a', margin: '0 0 4px' }}>
+                Collection Schedule
+              </h2>
+              <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>
+                Use the calendar buttons to add recurring reminders to your calendar app
+              </p>
+            </div>
+            {user?.barangay && schedules.length > 0 && (
+              <BarangayICalButton barangayId={user.barangay} barangayName={user.barangay_name || ''} />
+            )}
+          </div>
+          <div style={{ height: 20 }} />
           <ScheduleTable schedules={schedules} canEdit={false} />
         </div>
 
