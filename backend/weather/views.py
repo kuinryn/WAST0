@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from .models import WeatherAlert, NotificationLog
 from .serializers import WeatherAlertSerializer, NotificationLogSerializer
-from .services import fetch_weather_for_barangay
+from .services import ensure_recent_weather_for_barangay, fetch_weather_for_barangay
 from barangays.models import Barangay
 from barangays.permissions import IsSuperAdmin
 from schedules.permissions import IsOfficialOrSuperAdmin
@@ -16,7 +16,13 @@ class WeatherAlertListView(APIView):
         alerts = WeatherAlert.objects.all().order_by('-triggered_at')
         barangay_id = request.query_params.get('barangay')
         if barangay_id:
-            alerts = alerts.filter(barangay__id=barangay_id)
+            try:
+                barangay = Barangay.objects.get(pk=barangay_id)
+            except Barangay.DoesNotExist:
+                return Response({'error': 'Barangay not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            ensure_recent_weather_for_barangay(barangay)
+            alerts = alerts.filter(barangay=barangay)
         serializer = WeatherAlertSerializer(alerts, many=True)
         return Response(serializer.data)
 
@@ -34,7 +40,8 @@ class FetchWeatherView(APIView):
 
         result = fetch_weather_for_barangay(barangay)
         if 'error' in result:
-            return Response(result, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            response_status = result.get('status', status.HTTP_503_SERVICE_UNAVAILABLE)
+            return Response(result, status=response_status)
         return Response(result, status=status.HTTP_200_OK)
 
 class NotificationLogListView(APIView):

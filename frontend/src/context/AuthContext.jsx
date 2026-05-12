@@ -1,20 +1,23 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import api from '../api/axios'
+import { AuthContext } from './auth-context'
+import { registerMessagingToken } from '../services/firebaseMessaging'
 
-const AuthContext = createContext(null)
+function getSavedUser() {
+  const token = localStorage.getItem('access_token')
+  const savedUser = localStorage.getItem('user')
+  if (!token || !savedUser) return null
+  try {
+    return JSON.parse(savedUser)
+  } catch {
+    localStorage.clear()
+    return null
+  }
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    const savedUser = localStorage.getItem('user')
-    if (token && savedUser) {
-      setUser(JSON.parse(savedUser))
-    }
-    setLoading(false)
-  }, [])
+  const [user, setUser] = useState(getSavedUser)
+  const [loading] = useState(false)
 
   const login = async (email, password) => {
     const res = await api.post('/auth/login/', { email, password })
@@ -29,7 +32,8 @@ export function AuthProvider({ children }) {
     const res = await api.post('/auth/register/', data)
     localStorage.setItem('access_token', res.data.access)
     localStorage.setItem('refresh_token', res.data.refresh)
-    setUser({ email: data.email, role: 'resident' })
+    localStorage.setItem('user', JSON.stringify(res.data.user))
+    setUser(res.data.user)
     return res.data
   }
 
@@ -38,13 +42,14 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  useEffect(() => {
+    if (!user) return
+    registerMessagingToken().catch(() => {})
+  }, [user])
+
   return (
     <AuthContext.Provider value={{ user, login, logout, register, loading }}>
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  return useContext(AuthContext)
 }

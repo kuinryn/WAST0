@@ -1,6 +1,11 @@
 from .models import AuditLog
 
-SKIP_PATHS = ['/api/v1/auth/', '/api/health/']
+SKIP_PATHS = [
+    '/api/health/',
+    '/api/v1/auth/login/',
+    '/api/v1/auth/register/',
+    '/api/v1/auth/token/refresh/',
+]
 WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE']
 
 class AuditLogMiddleware:

@@ -45,3 +45,52 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id', 'name', 'email', 'role', 'barangay', 'barangay_name', 'created_at']
         read_only_fields = fields
+
+class FcmTokenSerializer(serializers.Serializer):
+    fcm_token = serializers.CharField(allow_blank=False, trim_whitespace=True)
+
+class AdminUserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, min_length=8, allow_blank=True)
+    barangay_name = serializers.CharField(source='barangay.name', read_only=True)
+    barangay = serializers.PrimaryKeyRelatedField(
+        queryset=Barangay.objects.all(), required=False, allow_null=True
+    )
+
+    class Meta:
+        model = CustomUser
+        fields = [
+            'id', 'name', 'email', 'password', 'role', 'barangay',
+            'barangay_name', 'is_active', 'created_at',
+        ]
+        read_only_fields = ['id', 'barangay_name', 'created_at']
+
+    def validate(self, data):
+        role = data.get('role', getattr(self.instance, 'role', None))
+        barangay = data.get('barangay', getattr(self.instance, 'barangay', None))
+        password = data.get('password')
+        if not self.instance and not password:
+            raise serializers.ValidationError({'password': 'Password is required.'})
+        if role == 'official' and not barangay:
+            raise serializers.ValidationError({'barangay': 'Barangay is required for barangay officials.'})
+        return data
+
+    def apply_role_flags(self, user):
+        user.is_staff = user.role == 'super_admin'
+        user.is_superuser = user.role == 'super_admin'
+
+    def create(self, validated_data):
+        password = validated_data.pop('password', None)
+        user = CustomUser.objects.create_user(password=password, **validated_data)
+        self.apply_role_flags(user)
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)
+        self.apply_role_flags(instance)
+        instance.save()
+        return instance

@@ -28,3 +28,17 @@ class NotificationLog(models.Model):
     alert = models.ForeignKey(WeatherAlert, on_delete=models.CASCADE, related_name='logs')
     status = models.CharField(max_length=10, choices=STATUS)
     sent_at = models.DateTimeField(auto_now_add=True)
+
+
+class WeatherFetchStatus(models.Model):
+    barangay = models.OneToOneField(
+        'barangays.Barangay',
+        on_delete=models.CASCADE,
+        related_name='weather_fetch_status',
+    )
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    last_result = models.CharField(max_length=255, blank=True)
+    last_error = models.TextField(blank=True)
+
+    def __str__(self):
+        return f'{self.barangay.name} weather checked at {self.last_checked_at}'

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import api from '../api/axios'
-import ScheduleTable from '../components/ScheduleTable'
+import ScheduleTable, { BarangayICalButton } from '../components/ScheduleTable'
 import WeatherAlertBanner from '../components/WeatherAlertBanner'
 import LoadingSpinner from '../components/LoadingSpinner'
 
@@ -13,16 +13,29 @@ export default function ResidentDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!user?.barangay) { setLoading(false); return }
+    let isMounted = true
+    if (!user?.barangay) {
+      const timeout = window.setTimeout(() => {
+        if (isMounted) setLoading(false)
+      }, 0)
+      return () => {
+        isMounted = false
+        window.clearTimeout(timeout)
+      }
+    }
     Promise.all([
       api.get(`/schedules/?barangay=${user.barangay}`),
       api.get(`/weather/alerts/?barangay=${user.barangay}`),
       api.get('/notifications/'),
-    ]).then(([s, a, n]) => {
-      setSchedules(s.data)
-      setAlerts(a.data)
-      setNotifications(n.data)
-    }).catch(() => {}).finally(() => setLoading(false))
+    ]).then(([scheduleRes, alertRes, notificationRes]) => {
+      if (!isMounted) return
+      setSchedules(scheduleRes.data)
+      setAlerts(alertRes.data)
+      setNotifications(notificationRes.data)
+    }).catch(() => {}).finally(() => {
+      if (isMounted) setLoading(false)
+    })
+    return () => { isMounted = false }
   }, [user])
 
   if (loading) return <LoadingSpinner />
@@ -31,80 +44,68 @@ export default function ResidentDashboard() {
   const today = new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
   return (
-    <div style={{ minHeight: '80vh' }}>
-      {/* Top banner */}
-      <div style={{ background: 'linear-gradient(135deg, #0a1f0f, #14532d)', padding: '36px 24px' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <p style={{ fontSize: 12, color: '#4ade80', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{today}</p>
-          <h1 style={{ fontFamily: 'DM Serif Display, serif', fontSize: 32, color: 'white', margin: '0 0 6px' }}>
-            Hello, {user?.name?.split(' ')[0]} 👋
-          </h1>
-          <p style={{ fontSize: 14, color: '#86efac', margin: 0 }}>
-            Here's your barangay's waste collection schedule and weather alerts.
-          </p>
+    <div className="page-shell">
+      <section className="page-hero">
+        <div className="hero-inner">
+          <div>
+            <p className="eyebrow">{today}</p>
+            <h1 className="hero-title">Hello, {user?.name?.split(' ')[0] || 'Resident'}</h1>
+            <p className="hero-copy">Your collection schedule, local weather alerts, and notification history in one place.</p>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
-
-        {/* Stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 28 }}>
+      <div className="page-inner">
+        <div className="stats-grid">
           {[
-            { label: 'Collection Schedules', value: schedules.length, icon: '📋', color: '#f0fdf4', border: '#bbf7d0' },
-            { label: 'Weather Alerts', value: alerts.length, icon: '🌧️', color: '#eff6ff', border: '#bfdbfe' },
-            { label: 'Notifications', value: notifications.length, icon: '🔔', color: '#fefce8', border: '#fde68a' },
-          ].map(({ label, value, icon, color, border }) => (
-            <div key={label} className="card" style={{ padding: '20px 22px', background: color, borderColor: border }}>
-              <div style={{ fontSize: 24, marginBottom: 8 }}>{icon}</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#0f172a', fontFamily: 'DM Serif Display, serif' }}>{value}</div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{label}</div>
+            { label: 'Schedules', value: schedules.length },
+            { label: 'Weather alerts', value: alerts.length },
+            { label: 'Notifications', value: notifications.length },
+          ].map(item => (
+            <div key={item.label} className="stat-card">
+              <div className="stat-value">{item.value}</div>
+              <div className="stat-label">{item.label}</div>
             </div>
           ))}
         </div>
 
-        {/* Weather alert */}
         <WeatherAlertBanner alert={latestAlert} />
 
-        {/* No barangay warning */}
         {!user?.barangay && (
-          <div style={{ background: '#fefce8', border: '1.5px solid #fde68a', borderRadius: 14, padding: '20px 24px', marginBottom: 24 }}>
-            <p style={{ fontSize: 14, color: '#92400e', margin: 0 }}>
-              ⚠️ <strong>No barangay assigned.</strong> Please contact your barangay administrator to be assigned to a barangay.
+          <div className="surface" style={{ padding: 18, marginBottom: 22, background: '#fefce8', borderColor: '#fde68a' }}>
+            <p style={{ color: '#92400e', margin: 0, fontSize: 14, lineHeight: 1.6 }}>
+              <strong>No barangay assigned.</strong> Please contact your barangay administrator so schedules can appear here.
             </p>
           </div>
         )}
 
-        {/* Schedule */}
-        <div className="card" style={{ padding: 28 }}>
-          <h2 style={{ fontFamily: 'DM Serif Display, serif', fontSize: 22, color: '#0f172a', margin: '0 0 6px' }}>
-            Collection Schedule
-          </h2>
-          <p style={{ fontSize: 13, color: '#94a3b8', margin: '0 0 20px' }}>
-            Your barangay's current waste collection timetable
-          </p>
+        <section className="card" style={{ padding: 24 }}>
+          <div className="section-header">
+            <div>
+              <h2 className="section-title">Collection Schedule</h2>
+              <p className="section-copy">Your barangay's current waste collection timetable.</p>
+            </div>
+            {user?.barangay && schedules.length > 0 && (
+              <BarangayICalButton barangayId={user.barangay} barangayName={user.barangay_name || ''} />
+            )}
+          </div>
           <ScheduleTable schedules={schedules} canEdit={false} />
-        </div>
+        </section>
 
-        {/* Recent notifications */}
         {notifications.length > 0 && (
-          <div className="card" style={{ padding: 28, marginTop: 20 }}>
-            <h2 style={{ fontFamily: 'DM Serif Display, serif', fontSize: 22, color: '#0f172a', margin: '0 0 20px' }}>Recent Notifications</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {notifications.slice(0, 5).map(n => (
-                <div key={n.id} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '12px 16px', background: '#f8fafc', borderRadius: 10,
-                  border: '1px solid #e2e8f0',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 18 }}>{n.status === 'sent' ? '✅' : '❌'}</span>
-                    <span style={{ fontSize: 13, color: '#334155' }}>Weather alert notification</span>
-                  </div>
-                  <span style={{ fontSize: 12, color: '#94a3b8' }}>{new Date(n.sent_at).toLocaleDateString()}</span>
+          <section className="card" style={{ padding: 24, marginTop: 18 }}>
+            <div className="section-header">
+              <h2 className="section-title">Recent Notifications</h2>
+            </div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {notifications.slice(0, 5).map(notification => (
+                <div key={notification.id} className="surface" style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, color: '#334155', fontWeight: 700 }}>Weather alert notification</span>
+                  <span className={`badge ${notification.status === 'sent' ? 'badge-green' : 'badge-red'}`}>{notification.status}</span>
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         )}
       </div>
     </div>

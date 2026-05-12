@@ -1,0 +1,10 @@
+# Backend secrets
+backend/.env
+
+# Python generated files
+__pycache__/
+*.py[cod]
+
+# Local databases and media
+*.sqlite3
+media/
