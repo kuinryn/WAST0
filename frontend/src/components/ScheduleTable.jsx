@@ -62,9 +62,9 @@ function ICalButton({ scheduleId }) {
       link.download = 'wasto-schedule.ics'
       link.click()
       URL.revokeObjectURL(link.href)
-      toast.success('Calendar file downloaded.')
+      toast.success('Calendar reminder downloaded.')
     } catch {
-      toast.error('Could not download calendar file.')
+      toast.error('Could not download calendar reminder.')
     } finally {
       setLoading(false)
     }
@@ -72,7 +72,7 @@ function ICalButton({ scheduleId }) {
 
   return (
     <button type="button" onClick={handleDownload} disabled={loading} className="btn-inline" style={{ padding: '6px 12px' }}>
-      {loading ? 'Downloading...' : 'ICS'}
+      {loading ? 'Downloading...' : 'Download reminder'}
     </button>
   )
 }
@@ -112,9 +112,9 @@ export function BarangayICalButton({ barangayId, barangayName }) {
       link.download = `wasto-${barangayName || 'barangay'}-schedules.ics`
       link.click()
       URL.revokeObjectURL(link.href)
-      toast.success('Schedules downloaded.')
+      toast.success('Calendar reminders downloaded.')
     } catch {
-      toast.error('Could not download schedules.')
+      toast.error('Could not download calendar reminders.')
     } finally {
       setLoading(false)
     }
@@ -122,7 +122,7 @@ export function BarangayICalButton({ barangayId, barangayName }) {
 
   return (
     <button type="button" onClick={handleDownload} disabled={loading} className="btn-inline blue">
-      {loading ? 'Exporting...' : 'Export calendar'}
+      {loading ? 'Downloading...' : 'Download all reminders'}
     </button>
   )
 }
@@ -170,7 +170,7 @@ export default function ScheduleTable({ schedules, onEdit, onDelete, onRefresh, 
                     className="btn-inline primary"
                     style={{ padding: '6px 12px', textDecoration: 'none' }}
                   >
-                    Google
+                    Add to Google Calendar
                   </a>
                   <ICalButton scheduleId={schedule.id} />
                   {canEdit && <SyncButton scheduleId={schedule.id} onRefresh={onRefresh} />}

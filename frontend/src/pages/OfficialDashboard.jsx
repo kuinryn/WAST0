@@ -27,7 +27,6 @@ export default function OfficialDashboard() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [fetchingWeather, setFetchingWeather] = useState(false)
-  const [syncingAll, setSyncingAll] = useState(false)
   const barangayId = user?.barangay
 
   const fetchData = useCallback(() => {
@@ -105,19 +104,6 @@ export default function OfficialDashboard() {
     }
   }
 
-  const handleSyncAll = async () => {
-    setSyncingAll(true)
-    try {
-      const response = await api.post('/schedules/sync-all/', { barangay_id: barangayId })
-      toast.success(response.data.message || 'Schedules synced.')
-      fetchData()
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Could not sync schedules.')
-    } finally {
-      setSyncingAll(false)
-    }
-  }
-
   if (loading) return <LoadingSpinner />
 
   return (
@@ -164,9 +150,6 @@ export default function OfficialDashboard() {
               {barangayId && schedules.length > 0 && (
                 <BarangayICalButton barangayId={barangayId} barangayName={barangayName} />
               )}
-              <button type="button" onClick={handleSyncAll} disabled={syncingAll || schedules.length === 0} className="btn-inline blue">
-                {syncingAll ? 'Syncing...' : 'Sync all'}
-              </button>
               <button type="button" onClick={openAdd} className="btn-inline primary">Add schedule</button>
             </div>
           </div>
