@@ -13,7 +13,8 @@ class WasteScheduleSerializer(serializers.ModelSerializer):
             'collection_day', 'collection_time', 'frequency',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
             'google_calendar_event_id', 'calendar_sync_enabled',
-            'last_synced_at', 'has_calendar_event',
+            'last_synced_at', 'has_calendar_event', 'status',
+            'weather_recommendation', 'reschedule_date',
         ]
         read_only_fields = [
             'created_by', 'created_at', 'updated_at',

@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 from django.http import HttpResponse
 from django.utils import timezone
@@ -16,6 +17,7 @@ from .google_calendar import (
     generate_week_ical,
     update_calendar_event,
 )
+from weather.services import notify_schedule_change
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,7 @@ class WasteScheduleListCreateView(APIView):
                     schedule.google_calendar_event_id = event_id
                     schedule.last_synced_at = timezone.now()
                     schedule.save(update_fields=['google_calendar_event_id', 'last_synced_at'])
+            notify_schedule_change(schedule, 'created')
             return Response(WasteScheduleSerializer(schedule).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -70,11 +73,22 @@ class WasteScheduleDetailView(APIView):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         serializer = WasteScheduleSerializer(schedule, data=request.data, partial=True)
         if serializer.is_valid():
+            previous = {
+                'waste_type': schedule.waste_type,
+                'collection_day': schedule.collection_day,
+                'collection_time': schedule.collection_time,
+                'frequency': schedule.frequency,
+                'status': schedule.status,
+                'reschedule_date': schedule.reschedule_date,
+            }
             updated = serializer.save()
             if updated.calendar_sync_enabled:
                 if update_calendar_event(updated):
                     updated.last_synced_at = timezone.now()
                     updated.save(update_fields=['last_synced_at'])
+            changed = any(getattr(updated, field) != value for field, value in previous.items())
+            if changed:
+                notify_schedule_change(updated)
             return Response(WasteScheduleSerializer(updated).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -196,3 +210,43 @@ class BulkCalendarSyncView(APIView):
             'synced': synced,
             'failed': failed,
         })
+
+class ScheduleWeatherActionView(APIView):
+    permission_classes = [IsOfficialOrSuperAdmin]
+
+    VALID_ACTIONS = {
+        'continue': 'continued',
+        'postpone': 'postponed',
+        'cancel': 'cancelled',
+        'reschedule': 'postponed',
+    }
+
+    def post(self, request, pk):
+        try:
+            schedule = WasteSchedule.objects.select_related('barangay').get(pk=pk)
+        except WasteSchedule.DoesNotExist:
+            return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        perm = IsOfficialOfBarangay()
+        if not perm.has_object_permission(request, self, schedule):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+
+        action = request.data.get('action')
+        if action not in self.VALID_ACTIONS:
+            return Response({'error': 'action must be continue, postpone, cancel, or reschedule.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        recommendation = request.data.get('weather_recommendation') or action
+        schedule.status = self.VALID_ACTIONS[action]
+        schedule.weather_recommendation = recommendation
+
+        if action in ['postpone', 'reschedule']:
+            reschedule_date = request.data.get('reschedule_date')
+            if not reschedule_date:
+                reschedule_date = timezone.localdate() + timedelta(days=2)
+            schedule.reschedule_date = reschedule_date
+        else:
+            schedule.reschedule_date = None
+
+        schedule.save(update_fields=['status', 'weather_recommendation', 'reschedule_date', 'updated_at'])
+        notify_schedule_change(schedule, action)
+        return Response(WasteScheduleSerializer(schedule).data)

@@ -16,6 +16,20 @@ const WASTE_LABELS = {
   hazardous: 'Hazardous',
 }
 
+const STATUS_BADGES = {
+  scheduled: 'badge-slate',
+  continued: 'badge-green',
+  postponed: 'badge-amber',
+  cancelled: 'badge-red',
+}
+
+const STATUS_LABELS = {
+  scheduled: 'Scheduled',
+  continued: 'Continued',
+  postponed: 'Postponed',
+  cancelled: 'Cancelled',
+}
+
 const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 function formatCalendarDate(date) {
@@ -71,7 +85,7 @@ function ICalButton({ scheduleId }) {
   }
 
   return (
-    <button type="button" onClick={handleDownload} disabled={loading} className="btn-inline" style={{ padding: '6px 12px' }}>
+    <button type="button" onClick={handleDownload} disabled={loading} className="btn-inline subtle" style={{ padding: '6px 12px' }}>
       {loading ? 'Downloading...' : 'Download reminder'}
     </button>
   )
@@ -146,6 +160,7 @@ export default function ScheduleTable({ schedules, onEdit, onDelete, onRefresh, 
             <th>Collection Day</th>
             <th>Time</th>
             <th>Frequency</th>
+            <th>Status</th>
             <th>Calendar</th>
             {canEdit && <th>Actions</th>}
           </tr>
@@ -162,7 +177,19 @@ export default function ScheduleTable({ schedules, onEdit, onDelete, onRefresh, 
               <td>{schedule.collection_time}</td>
               <td style={{ textTransform: 'capitalize' }}>{schedule.frequency.replace('_', '-')}</td>
               <td>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span className={`badge ${STATUS_BADGES[schedule.status] || 'badge-slate'}`}>
+                    {STATUS_LABELS[schedule.status] || 'Scheduled'}
+                  </span>
+                  {schedule.reschedule_date && (
+                    <span style={{ fontSize: 12, color: '#64748b' }}>
+                      New date: {new Date(schedule.reschedule_date).toLocaleDateString('en-PH')}
+                    </span>
+                  )}
+                </div>
+              </td>
+              <td>
+                <div className="action-cluster">
                   <a
                     href={buildGoogleCalendarUrl(schedule)}
                     target="_blank"

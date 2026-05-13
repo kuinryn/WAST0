@@ -3,7 +3,7 @@ import { useAuth } from '../context/useAuth'
 import api from '../api/axios'
 import toast from 'react-hot-toast'
 import ScheduleTable, { BarangayICalButton } from '../components/ScheduleTable'
-import WeatherAlertBanner from '../components/WeatherAlertBanner'
+import { WeatherUpdates } from '../components/WeatherAlertBanner'
 import ConfirmModal from '../components/ConfirmModal'
 import LoadingSpinner from '../components/LoadingSpinner'
 
@@ -18,12 +18,15 @@ const EMPTY_FORM = {
 export default function OfficialDashboard() {
   const { user } = useAuth()
   const [schedules, setSchedules] = useState([])
-  const [alerts, setAlerts] = useState([])
+  const [recommendation, setRecommendation] = useState(null)
+  const [weatherUpdates, setWeatherUpdates] = useState(null)
   const [barangayName, setBarangayName] = useState('')
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingSchedule, setEditingSchedule] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [rescheduleOpen, setRescheduleOpen] = useState(false)
+  const [rescheduleDate, setRescheduleDate] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [fetchingWeather, setFetchingWeather] = useState(false)
@@ -36,11 +39,13 @@ export default function OfficialDashboard() {
     }
     Promise.all([
       api.get(`/schedules/?barangay=${barangayId}`),
-      api.get(`/weather/alerts/?barangay=${barangayId}`),
       api.get('/barangays/'),
-    ]).then(([scheduleRes, alertRes, barangayRes]) => {
+      api.get(`/weather/tomorrow-recommendation/?barangay=${barangayId}`).catch(() => ({ data: null })),
+      api.get(`/weather/updates/?barangay=${barangayId}`).catch(() => ({ data: null })),
+    ]).then(([scheduleRes, barangayRes, recommendationRes, weatherUpdateRes]) => {
       setSchedules(scheduleRes.data)
-      setAlerts(alertRes.data)
+      setRecommendation(recommendationRes.data)
+      setWeatherUpdates(weatherUpdateRes.data)
       const found = barangayRes.data.find(barangay => barangay.id === barangayId)
       setBarangayName(found?.name || 'Your Barangay')
     }).catch(() => {}).finally(() => setLoading(false))
@@ -104,6 +109,33 @@ export default function OfficialDashboard() {
     }
   }
 
+  const openReschedule = () => {
+    const date = new Date()
+    date.setDate(date.getDate() + 2)
+    setRescheduleDate(date.toISOString().slice(0, 10))
+    setRescheduleOpen(true)
+  }
+
+  const handleWeatherAction = async (action, selectedDate = null) => {
+    if (!recommendation?.schedules?.length) {
+      toast.error('No collection schedule for tomorrow.')
+      return
+    }
+
+    try {
+      await Promise.all(recommendation.schedules.map(schedule => api.post(`/schedules/${schedule.id}/weather-action/`, {
+        action,
+        weather_recommendation: recommendation.weather.recommendation,
+        ...(selectedDate ? { reschedule_date: selectedDate } : {}),
+      })))
+      toast.success('Tomorrow schedule updated.')
+      setRescheduleOpen(false)
+      fetchData()
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Could not update tomorrow schedule.')
+    }
+  }
+
   if (loading) return <LoadingSpinner />
 
   return (
@@ -119,7 +151,6 @@ export default function OfficialDashboard() {
             <button type="button" onClick={handleFetchWeather} disabled={fetchingWeather} className="btn-inline ghost">
               {fetchingWeather ? 'Refreshing...' : 'Refresh weather'}
             </button>
-            <button type="button" onClick={openAdd} className="btn-inline light">Add schedule</button>
           </div>
         </div>
       </section>
@@ -128,7 +159,6 @@ export default function OfficialDashboard() {
         <div className="stats-grid">
           {[
             { label: 'Total schedules', value: schedules.length },
-            { label: 'Active alerts', value: alerts.length },
             { label: 'Barangay', value: barangayName || '-' },
           ].map(item => (
             <div key={item.label} className="stat-card">
@@ -138,7 +168,44 @@ export default function OfficialDashboard() {
           ))}
         </div>
 
-        <WeatherAlertBanner alert={alerts[0]} />
+        <WeatherUpdates updates={weatherUpdates} title="Barangay Weather Updates" />
+
+        {recommendation?.weather && (
+          <section className="card weather-panel">
+            <div className="section-header">
+              <div>
+                <h2 className="section-title">Tomorrow Weather</h2>
+                <p className="section-copy">
+                  Review the forecast before confirming tomorrow's collection plan.
+                </p>
+              </div>
+              <span className={`badge ${recommendation.weather.recommendation === 'cancel' ? 'badge-red' : recommendation.weather.recommendation === 'postpone' ? 'badge-amber' : 'badge-green'}`}>
+                {recommendation.weather.recommendation === 'cancel' ? 'Cancel collection' : recommendation.weather.recommendation === 'postpone' ? 'Postpone collection' : 'Continue collection'}
+              </span>
+            </div>
+            <div className="weather-metrics">
+              <div className="weather-metric">
+                <div className="metric-label">Condition</div>
+                <div className="metric-value">{recommendation.weather.condition}</div>
+              </div>
+              <div className="weather-metric">
+                <div className="metric-label">Rain chance</div>
+                <div className="metric-value">{recommendation.weather.rain_probability}%</div>
+              </div>
+              <div className="weather-metric">
+                <div className="metric-label">Expected rain</div>
+                <div className="metric-value">{recommendation.weather.rain_volume_mm} mm</div>
+              </div>
+            </div>
+            <p style={{ marginTop: 0, color: '#475569', fontSize: 14 }}>{recommendation.weather.reason}</p>
+            <div className="decision-bar">
+              <button type="button" onClick={() => handleWeatherAction('continue')} className="btn-inline primary">Continue</button>
+              <button type="button" onClick={() => handleWeatherAction('postpone')} className="btn-inline blue">Postpone</button>
+              <button type="button" onClick={openReschedule} className="btn-inline subtle">Choose new date</button>
+              <button type="button" onClick={() => handleWeatherAction('cancel')} className="btn-danger" style={{ padding: '8px 14px' }}>Cancel</button>
+            </div>
+          </section>
+        )}
 
         <section className="card" style={{ padding: 24 }}>
           <div className="section-header">
@@ -201,6 +268,37 @@ export default function OfficialDashboard() {
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
         />
+      )}
+
+      {rescheduleOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-panel">
+            <h2 className="section-title" style={{ marginBottom: 8 }}>Choose New Collection Date</h2>
+            <p className="section-copy" style={{ marginBottom: 18 }}>
+              This will mark tomorrow's collection as postponed and show the new date to residents.
+            </p>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 6 }}>New collection date</label>
+            <input
+              type="date"
+              value={rescheduleDate}
+              onChange={event => setRescheduleDate(event.target.value)}
+              className="input"
+              style={{ marginBottom: 22 }}
+            />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="button" onClick={() => setRescheduleOpen(false)} className="btn-secondary" style={{ flex: 1 }}>Back</button>
+              <button
+                type="button"
+                onClick={() => handleWeatherAction('reschedule', rescheduleDate)}
+                disabled={!rescheduleDate}
+                className="btn-primary"
+                style={{ flex: 1 }}
+              >
+                Save Date
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

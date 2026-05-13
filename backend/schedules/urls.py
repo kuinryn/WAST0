@@ -4,6 +4,7 @@ from .views import (
     BulkCalendarSyncView,
     ScheduleCalendarSyncView,
     ScheduleICalDownloadView,
+    ScheduleWeatherActionView,
     WasteScheduleDetailView,
     WasteScheduleListCreateView,
 )
@@ -15,4 +16,5 @@ urlpatterns = [
     path('<uuid:pk>/', WasteScheduleDetailView.as_view(), name='schedule-detail'),
     path('<uuid:pk>/sync/', ScheduleCalendarSyncView.as_view(), name='schedule-calendar-sync'),
     path('<uuid:pk>/ical/', ScheduleICalDownloadView.as_view(), name='schedule-ical'),
+    path('<uuid:pk>/weather-action/', ScheduleWeatherActionView.as_view(), name='schedule-weather-action'),
 ]

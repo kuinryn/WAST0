@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import api from '../api/axios'
 import toast from 'react-hot-toast'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -39,6 +39,11 @@ export default function AdminDashboard() {
   const [editingUser, setEditingUser] = useState(null)
   const [form, setForm] = useState({ name: '', district: '' })
   const [userForm, setUserForm] = useState(emptyUserForm)
+  const [barangaySearch, setBarangaySearch] = useState('')
+  const [barangayDistrictFilter, setBarangayDistrictFilter] = useState('')
+  const [userSearch, setUserSearch] = useState('')
+  const [userRoleFilter, setUserRoleFilter] = useState('')
+  const [userBarangayFilter, setUserBarangayFilter] = useState('')
 
   const fetchAll = () => {
     Promise.all([
@@ -158,9 +163,53 @@ export default function AdminDashboard() {
     } catch { toast.error('Failed to update user status.') }
   }
 
-  if (loading) return <LoadingSpinner />
-
   const ACTION_COLORS = { POST: 'badge-green', DELETE: 'badge-red', PUT: 'badge-blue', PATCH: 'badge-blue' }
+  const unavailableOfficialBarangays = new Set(
+    barangays
+      .filter(barangay => barangay.official_status === 'Active')
+      .filter(barangay => !(editingUser?.role === 'official' && editingUser?.barangay === barangay.id))
+      .map(barangay => barangay.id)
+  )
+  const districts = useMemo(() => (
+    [...new Set(barangays.map(barangay => barangay.district).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+  ), [barangays])
+  const filteredBarangays = useMemo(() => {
+    const query = barangaySearch.trim().toLowerCase()
+
+    return barangays.filter(barangay => {
+      const matchesDistrict = !barangayDistrictFilter || barangay.district === barangayDistrictFilter
+      const searchFields = [
+        barangay.name,
+        barangay.district,
+        barangay.official_status,
+        barangay.official_name,
+      ].filter(Boolean).join(' ').toLowerCase()
+
+      return matchesDistrict && (!query || searchFields.includes(query))
+    })
+  }, [barangays, barangayDistrictFilter, barangaySearch])
+  const filteredUsers = useMemo(() => {
+    const query = userSearch.trim().toLowerCase()
+
+    return users.filter(user => {
+      const matchesRole = !userRoleFilter || user.role === userRoleFilter
+      const matchesBarangay = !userBarangayFilter
+        || (userBarangayFilter === 'none' ? !user.barangay : String(user.barangay || '') === userBarangayFilter)
+      const searchFields = [
+        user.name,
+        user.email,
+        ROLE_LABELS[user.role],
+        user.role,
+        user.barangay_name,
+        user.is_active ? 'Active' : 'Inactive',
+      ].filter(Boolean).join(' ').toLowerCase()
+
+      return matchesRole && matchesBarangay && (!query || searchFields.includes(query))
+    })
+  }, [users, userBarangayFilter, userRoleFilter, userSearch])
+
+  if (loading) return <LoadingSpinner />
 
   return (
     <div style={{ minHeight: '80vh' }}>
@@ -204,28 +253,51 @@ export default function AdminDashboard() {
         {tab === 'barangays' && (
           <div className="card" style={{ padding: 28 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-              <h2 style={{ fontFamily: 'DM Serif Display, serif', fontSize: 22, margin: 0 }}>Barangays ({barangays.length})</h2>
+              <h2 style={{ fontFamily: 'DM Serif Display, serif', fontSize: 22, margin: 0 }}>Barangays ({filteredBarangays.length}/{barangays.length})</h2>
               <button onClick={() => { setEditingBarangay(null); setForm({ name: '', district: '' }); setShowModal(true) }}
                 style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: '#14532d', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
                 + Add Barangay
               </button>
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 18 }}>
+              <input
+                type="search"
+                value={barangaySearch}
+                onChange={e => setBarangaySearch(e.target.value)}
+                className="input"
+                placeholder="Search barangays, district, or official"
+              />
+              <select value={barangayDistrictFilter} onChange={e => setBarangayDistrictFilter(e.target.value)} className="input">
+                <option value="">All districts</option>
+                {districts.map(district => (
+                  <option key={district} value={district}>{district}</option>
+                ))}
+              </select>
+            </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
-                    {['Barangay Name', 'District', 'Actions'].map(h => (
+                    {['Barangay Name', 'District', 'Official Account', 'Actions'].map(h => (
                       <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {barangays.map(b => (
+                  {filteredBarangays.map(b => (
                     <tr key={b.id} style={{ borderBottom: '1px solid #f8fafc' }}
                       onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                       <td style={{ padding: '12px 14px', fontWeight: 600, color: '#0f172a' }}>{b.name}</td>
                       <td style={{ padding: '12px 14px', color: '#64748b' }}>{b.district}</td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <span className={`badge ${b.official_status === 'Active' ? 'badge-green' : 'badge-slate'}`}>
+                          {b.official_status || 'Inactive'}
+                        </span>
+                        {b.official_name && (
+                          <span style={{ display: 'block', marginTop: 4, color: '#64748b', fontSize: 12 }}>{b.official_name}</span>
+                        )}
+                      </td>
                       <td style={{ padding: '12px 14px' }}>
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button onClick={() => { setEditingBarangay(b); setForm({ name: b.name, district: b.district }); setShowModal(true) }}
@@ -236,6 +308,13 @@ export default function AdminDashboard() {
                       </td>
                     </tr>
                   ))}
+                  {filteredBarangays.length === 0 && (
+                    <tr>
+                      <td colSpan={4} style={{ padding: '24px 14px', color: '#64748b', textAlign: 'center' }}>
+                        No barangays match the current filters.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -245,11 +324,33 @@ export default function AdminDashboard() {
         {tab === 'users' && (
           <div className="card" style={{ padding: 28 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-              <h2 style={{ fontFamily: 'DM Serif Display, serif', fontSize: 22, margin: 0 }}>Users ({users.length})</h2>
+              <h2 style={{ fontFamily: 'DM Serif Display, serif', fontSize: 22, margin: 0 }}>Users ({filteredUsers.length}/{users.length})</h2>
               <button onClick={() => { resetUserForm(); setShowUserModal(true) }}
                 style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: '#14532d', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
                 + Add User
               </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 18 }}>
+              <input
+                type="search"
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+                className="input"
+                placeholder="Search name, email, role, or barangay"
+              />
+              <select value={userRoleFilter} onChange={e => setUserRoleFilter(e.target.value)} className="input">
+                <option value="">All roles</option>
+                {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <select value={userBarangayFilter} onChange={e => setUserBarangayFilter(e.target.value)} className="input">
+                <option value="">All barangays</option>
+                <option value="none">No barangay</option>
+                {barangays.map(barangay => (
+                  <option key={barangay.id} value={barangay.id}>{barangay.name}</option>
+                ))}
+              </select>
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -261,7 +362,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map(user => (
+                  {filteredUsers.map(user => (
                     <tr key={user.id} style={{ borderBottom: '1px solid #f8fafc' }}
                       onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -290,6 +391,13 @@ export default function AdminDashboard() {
                       </td>
                     </tr>
                   ))}
+                  {filteredUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '24px 14px', color: '#64748b', textAlign: 'center' }}>
+                        No users match the current filters.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -395,7 +503,11 @@ export default function AdminDashboard() {
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 5 }}>Barangay</label>
                 <select value={userForm.barangay} onChange={e => setUserForm({ ...userForm, barangay: e.target.value })} className="input">
                   <option value="">No barangay</option>
-                  {barangays.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  {barangays.map(b => (
+                    <option key={b.id} value={b.id} disabled={userForm.role === 'official' && unavailableOfficialBarangays.has(b.id)}>
+                      {b.name}{b.official_status === 'Active' ? ' - Active' : ' - Inactive'}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>

@@ -18,6 +18,12 @@ class WasteSchedule(models.Model):
         ('weekly', 'Weekly'),
         ('bi_weekly', 'Bi-Weekly'),
     ]
+    STATUS = [
+        ('scheduled', 'Scheduled'),
+        ('continued', 'Continued'),
+        ('postponed', 'Postponed'),
+        ('cancelled', 'Cancelled'),
+    ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     barangay = models.ForeignKey('barangays.Barangay', on_delete=models.CASCADE, related_name='schedules')
@@ -31,6 +37,9 @@ class WasteSchedule(models.Model):
     google_calendar_event_id = models.CharField(max_length=255, blank=True, null=True)
     calendar_sync_enabled = models.BooleanField(default=True)
     last_synced_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS, default='scheduled')
+    weather_recommendation = models.CharField(max_length=20, blank=True)
+    reschedule_date = models.DateField(null=True, blank=True)
 
     def __str__(self):
         return f'{self.barangay.name} - {self.waste_type} - {self.collection_day}'

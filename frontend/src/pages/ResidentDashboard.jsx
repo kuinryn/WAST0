@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../context/useAuth'
 import api from '../api/axios'
 import ScheduleTable, { BarangayICalButton } from '../components/ScheduleTable'
-import WeatherAlertBanner from '../components/WeatherAlertBanner'
+import WeatherAlertBanner, { WeatherUpdates } from '../components/WeatherAlertBanner'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function ResidentDashboard() {
@@ -10,7 +10,9 @@ export default function ResidentDashboard() {
   const [schedules, setSchedules] = useState([])
   const [alerts, setAlerts] = useState([])
   const [notifications, setNotifications] = useState([])
+  const [weatherUpdates, setWeatherUpdates] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -27,11 +29,13 @@ export default function ResidentDashboard() {
       api.get(`/schedules/?barangay=${user.barangay}`),
       api.get(`/weather/alerts/?barangay=${user.barangay}`),
       api.get('/notifications/'),
-    ]).then(([scheduleRes, alertRes, notificationRes]) => {
+      api.get(`/weather/updates/?barangay=${user.barangay}`).catch(() => ({ data: null })),
+    ]).then(([scheduleRes, alertRes, notificationRes, weatherUpdateRes]) => {
       if (!isMounted) return
       setSchedules(scheduleRes.data)
       setAlerts(alertRes.data)
       setNotifications(notificationRes.data)
+      setWeatherUpdates(weatherUpdateRes.data)
     }).catch(() => {}).finally(() => {
       if (isMounted) setLoading(false)
     })
@@ -41,7 +45,26 @@ export default function ResidentDashboard() {
   if (loading) return <LoadingSpinner />
 
   const latestAlert = alerts[0] || null
+  const unreadNotifications = notifications.filter(notification => !notification.is_read)
+  const unreadCount = unreadNotifications.length
   const today = new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  const openNotifications = async () => {
+    setNotificationsOpen(true)
+    if (!unreadCount) return
+
+    const readAt = new Date().toISOString()
+    setNotifications(current => current.map(notification => (
+      notification.is_read ? notification : { ...notification, is_read: true, read_at: readAt }
+    )))
+
+    try {
+      await api.post('/notifications/mark-read/', {})
+    } catch {
+      setNotifications(current => current.map(notification => (
+        notification.read_at === readAt ? { ...notification, is_read: false, read_at: null } : notification
+      )))
+    }
+  }
 
   return (
     <div className="page-shell">
@@ -57,19 +80,22 @@ export default function ResidentDashboard() {
 
       <div className="page-inner">
         <div className="stats-grid">
-          {[
-            { label: 'Schedules', value: schedules.length },
-            { label: 'Weather alerts', value: alerts.length },
-            { label: 'Notifications', value: notifications.length },
-          ].map(item => (
-            <div key={item.label} className="stat-card">
-              <div className="stat-value">{item.value}</div>
-              <div className="stat-label">{item.label}</div>
-            </div>
-          ))}
+          <div className="stat-card">
+            <div className="stat-value">{schedules.length}</div>
+            <div className="stat-label">Schedules</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value">{weatherUpdates?.days?.[0]?.weather_type || 'Weather'}</div>
+            <div className="stat-label">Today</div>
+          </div>
+          <button type="button" className="stat-card stat-card-button" onClick={openNotifications}>
+            <div className="stat-value">{unreadCount}</div>
+            <div className="stat-label">Unread notifications</div>
+          </button>
         </div>
 
         <WeatherAlertBanner alert={latestAlert} />
+        <WeatherUpdates updates={weatherUpdates} />
 
         {!user?.barangay && (
           <div className="surface" style={{ padding: 18, marginBottom: 22, background: '#fefce8', borderColor: '#fde68a' }}>
@@ -92,22 +118,45 @@ export default function ResidentDashboard() {
           <ScheduleTable schedules={schedules} canEdit={false} />
         </section>
 
-        {notifications.length > 0 && (
-          <section className="card" style={{ padding: 24, marginTop: 18 }}>
-            <div className="section-header">
-              <h2 className="section-title">Recent Notifications</h2>
-            </div>
-            <div style={{ display: 'grid', gap: 10 }}>
-              {notifications.slice(0, 5).map(notification => (
-                <div key={notification.id} className="surface" style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 13, color: '#334155', fontWeight: 700 }}>Weather alert notification</span>
-                  <span className={`badge ${notification.status === 'sent' ? 'badge-green' : 'badge-red'}`}>{notification.status}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
       </div>
+
+      {notificationsOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal-panel notification-modal">
+            <div className="section-header">
+              <div>
+                <h2 className="section-title">Notifications</h2>
+                <p className="section-copy">{notifications.length} total notification{notifications.length !== 1 ? 's' : ''}</p>
+              </div>
+              <button type="button" className="btn-secondary" onClick={() => setNotificationsOpen(false)}>Close</button>
+            </div>
+
+            {notifications.length === 0 ? (
+              <div className="empty-state">
+                <strong>No notifications yet</strong>
+                Schedule updates and weather alerts will appear here.
+              </div>
+            ) : (
+              <div className="notification-list notification-modal-list">
+                {notifications.map(notification => (
+                  <div key={notification.id} className="surface notification-item">
+                    <div>
+                      <span className="notification-title">{notification.title || 'Wasto notification'}</span>
+                      {notification.message && <span className="notification-message">{notification.message}</span>}
+                      <span className="notification-meta">
+                        {notification.sent_at ? new Date(notification.sent_at).toLocaleString('en-PH') : 'Delivery time unavailable'}
+                      </span>
+                    </div>
+                    <span className={`badge ${notification.category === 'schedule' ? 'badge-blue' : 'badge-green'}`}>
+                      {notification.category || 'weather'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
