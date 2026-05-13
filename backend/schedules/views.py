@@ -101,6 +101,10 @@ class WasteScheduleDetailView(APIView):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         if schedule.google_calendar_event_id:
             delete_calendar_event(schedule.google_calendar_event_id)
+        schedule.status = 'cancelled'
+        schedule.weather_recommendation = 'cancel'
+        schedule.reschedule_date = None
+        notify_schedule_change(schedule, 'deleted')
         schedule.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

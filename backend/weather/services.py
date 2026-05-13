@@ -443,14 +443,19 @@ def notify_schedule_change(schedule, action='updated'):
     users = CustomUser.objects.filter(barangay=schedule.barangay, role='resident')
     waste_label = schedule.waste_type.replace('_', ' ').title()
     barangay_name = schedule.barangay.name if schedule.barangay else 'your barangay'
-    title = 'New collection schedule' if action == 'created' else 'Collection schedule updated'
+    if action == 'created':
+        title = 'New collection schedule'
+    elif action in ['cancel', 'deleted']:
+        title = 'Collection schedule cancelled'
+    else:
+        title = 'Collection schedule updated'
 
     if action in ['postpone', 'reschedule'] and schedule.reschedule_date:
         message = (
             f'{waste_label} collection in {barangay_name} has been rescheduled '
             f'to {schedule.reschedule_date}.'
         )
-    elif action == 'cancel':
+    elif action in ['cancel', 'deleted']:
         message = f'{waste_label} collection in {barangay_name} has been cancelled.'
     elif action == 'continue':
         message = f'{waste_label} collection in {barangay_name} will continue as scheduled.'
