@@ -45,3 +45,21 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id', 'name', 'email', 'role', 'barangay', 'barangay_name', 'created_at']
         read_only_fields = fields
+
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    barangay = serializers.PrimaryKeyRelatedField(
+        queryset=Barangay.objects.all(), required=False, allow_null=True
+    )
+    barangay_name = serializers.CharField(source='barangay.name', read_only=True)
+
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'name', 'email', 'role', 'barangay', 'barangay_name', 'created_at']
+        read_only_fields = ['id', 'email', 'role', 'created_at']
+
+    def update(self, instance, validated_data):
+        instance.name = validated_data.get('name', instance.name)
+        instance.barangay = validated_data.get('barangay', instance.barangay)
+        instance.save()
+        return instance

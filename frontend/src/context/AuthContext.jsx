@@ -38,8 +38,16 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  const updateProfile = async (data) => {
+    const res = await api.patch('/auth/profile/', data)
+    const updatedUser = res.data
+    localStorage.setItem('user', JSON.stringify(updatedUser))
+    setUser(updatedUser)
+    return updatedUser
+  }
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, register, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, register, updateProfile, loading }}>
       {children}
     </AuthContext.Provider>
   )
