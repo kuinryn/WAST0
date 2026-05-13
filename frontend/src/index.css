@@ -630,8 +630,20 @@ body::before {
   flex-wrap: wrap;
 }
 
+.notification-item.is-unread {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.notification-item.is-read {
+  background: white;
+}
+
 .notification-title {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   font-size: 13px;
   color: var(--slate-700);
   font-weight: 800;
@@ -655,14 +667,41 @@ body::before {
 
 .notification-modal {
   max-width: 560px;
-  aspect-ratio: 1 / 1;
+  height: min(620px, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .notification-modal-list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.notification-remove {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.notification-remove:hover {
+  background: #fee2e2;
 }
 
 .table-wrap {

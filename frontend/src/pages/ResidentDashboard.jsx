@@ -48,8 +48,26 @@ export default function ResidentDashboard() {
   const unreadNotifications = notifications.filter(notification => !notification.is_read)
   const unreadCount = unreadNotifications.length
   const today = new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-  const openNotifications = async () => {
+  const openNotifications = () => {
     setNotificationsOpen(true)
+  }
+
+  const markNotificationRead = async (notificationId) => {
+    const readAt = new Date().toISOString()
+    setNotifications(current => current.map(notification => (
+      notification.id === notificationId ? { ...notification, is_read: true, read_at: readAt } : notification
+    )))
+
+    try {
+      await api.post('/notifications/mark-read/', { notification_id: notificationId })
+    } catch {
+      setNotifications(current => current.map(notification => (
+        notification.id === notificationId ? { ...notification, is_read: false, read_at: null } : notification
+      )))
+    }
+  }
+
+  const markAllNotificationsRead = async () => {
     if (!unreadCount) return
 
     const readAt = new Date().toISOString()
@@ -63,6 +81,17 @@ export default function ResidentDashboard() {
       setNotifications(current => current.map(notification => (
         notification.read_at === readAt ? { ...notification, is_read: false, read_at: null } : notification
       )))
+    }
+  }
+
+  const removeNotification = async (notificationId) => {
+    const previous = notifications
+    setNotifications(current => current.filter(notification => notification.id !== notificationId))
+
+    try {
+      await api.delete(`/notifications/${notificationId}/`)
+    } catch {
+      setNotifications(previous)
     }
   }
 
@@ -128,7 +157,12 @@ export default function ResidentDashboard() {
                 <h2 className="section-title">Notifications</h2>
                 <p className="section-copy">{notifications.length} total notification{notifications.length !== 1 ? 's' : ''}</p>
               </div>
-              <button type="button" className="btn-secondary" onClick={() => setNotificationsOpen(false)}>Close</button>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {unreadCount > 0 && (
+                  <button type="button" className="btn-inline subtle" onClick={markAllNotificationsRead}>Mark all read</button>
+                )}
+                <button type="button" className="btn-secondary" onClick={() => setNotificationsOpen(false)}>Close</button>
+              </div>
             </div>
 
             {notifications.length === 0 ? (
@@ -139,17 +173,42 @@ export default function ResidentDashboard() {
             ) : (
               <div className="notification-list notification-modal-list">
                 {notifications.map(notification => (
-                  <div key={notification.id} className="surface notification-item">
+                  <div key={notification.id} className={`surface notification-item ${notification.is_read ? 'is-read' : 'is-unread'}`}>
                     <div>
-                      <span className="notification-title">{notification.title || 'Wasto notification'}</span>
+                      <span className="notification-title">
+                        {notification.title || 'Wasto notification'}
+                        <span className={`badge ${notification.is_read ? 'badge-slate' : 'badge-amber'}`}>
+                          {notification.is_read ? 'Read' : 'Unread'}
+                        </span>
+                      </span>
                       {notification.message && <span className="notification-message">{notification.message}</span>}
                       <span className="notification-meta">
                         {notification.sent_at ? new Date(notification.sent_at).toLocaleString('en-PH') : 'Delivery time unavailable'}
                       </span>
                     </div>
-                    <span className={`badge ${notification.category === 'schedule' ? 'badge-blue' : 'badge-green'}`}>
-                      {notification.category || 'weather'}
-                    </span>
+                    <div className="notification-actions">
+                      <span className={`badge ${notification.category === 'schedule' ? 'badge-blue' : 'badge-green'}`}>
+                        {notification.category || 'weather'}
+                      </span>
+                      {notification.is_read ? (
+                        <button
+                          type="button"
+                          className="notification-remove"
+                          onClick={() => removeNotification(notification.id)}
+                          aria-label="Remove notification"
+                        >
+                          x
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-inline subtle"
+                          onClick={() => markNotificationRead(notification.id)}
+                        >
+                          Mark read
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

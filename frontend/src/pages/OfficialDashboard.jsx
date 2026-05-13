@@ -8,12 +8,19 @@ import ConfirmModal from '../components/ConfirmModal'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 const EMPTY_FORM = {
-  waste_type: 'biodegradable',
+  waste_types: ['biodegradable'],
   collection_day: 'Monday',
   collection_time: '08:00',
   frequency: 'weekly',
   calendar_sync_enabled: true,
 }
+
+const WASTE_OPTIONS = [
+  ['biodegradable', 'Biodegradable'],
+  ['non_biodegradable', 'Non-biodegradable'],
+  ['residual', 'Residual'],
+  ['hazardous', 'Hazardous'],
+]
 
 export default function OfficialDashboard() {
   const { user } = useAuth()
@@ -60,7 +67,7 @@ export default function OfficialDashboard() {
   const openEdit = (schedule) => {
     setEditingSchedule(schedule)
     setForm({
-      waste_type: schedule.waste_type,
+      waste_types: [schedule.waste_type],
       collection_day: schedule.collection_day,
       collection_time: schedule.collection_time,
       frequency: schedule.frequency,
@@ -71,17 +78,27 @@ export default function OfficialDashboard() {
 
   const handleSave = async (event) => {
     event.preventDefault()
+    if (!form.waste_types.length) {
+      toast.error('Select at least one waste type.')
+      return
+    }
     setSaving(true)
     try {
-      const payload = { ...form, barangay: barangayId }
+      const { waste_types, ...scheduleForm } = form
       if (editingSchedule) {
+        const payload = { ...scheduleForm, waste_type: waste_types[0], barangay: barangayId }
         await api.put(`/schedules/${editingSchedule.id}/`, payload)
         toast.success('Schedule updated.')
       } else {
-        await api.post('/schedules/', payload)
-        toast.success('Schedule created.')
+        await Promise.all(waste_types.map(wasteType => api.post('/schedules/', {
+          ...scheduleForm,
+          waste_type: wasteType,
+          barangay: barangayId,
+        })))
+        toast.success(waste_types.length === 1 ? 'Schedule created.' : 'Schedules created.')
       }
       setShowModal(false)
+      setForm(EMPTY_FORM)
       fetchData()
     } catch { toast.error('Failed to save schedule.') }
     finally { setSaving(false) }
@@ -200,8 +217,7 @@ export default function OfficialDashboard() {
             <p style={{ marginTop: 0, color: '#475569', fontSize: 14 }}>{recommendation.weather.reason}</p>
             <div className="decision-bar">
               <button type="button" onClick={() => handleWeatherAction('continue')} className="btn-inline primary">Continue</button>
-              <button type="button" onClick={() => handleWeatherAction('postpone')} className="btn-inline blue">Postpone</button>
-              <button type="button" onClick={openReschedule} className="btn-inline subtle">Choose new date</button>
+              <button type="button" onClick={openReschedule} className="btn-inline blue">Reschedule</button>
               <button type="button" onClick={() => handleWeatherAction('cancel')} className="btn-danger" style={{ padding: '8px 14px' }}>Cancel</button>
             </div>
           </section>
@@ -229,8 +245,33 @@ export default function OfficialDashboard() {
           <div className="modal-panel">
             <h2 className="section-title" style={{ marginBottom: 20 }}>{editingSchedule ? 'Edit Schedule' : 'Add Schedule'}</h2>
             <form onSubmit={handleSave}>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 6 }}>Waste Type</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+                  {WASTE_OPTIONS.map(([value, label]) => {
+                    const checked = form.waste_types.includes(value)
+                    return (
+                      <label key={value} className="surface" style={{ display: 'flex', gap: 9, alignItems: 'center', padding: 10, cursor: 'pointer' }}>
+                        <input
+                          type={editingSchedule ? 'radio' : 'checkbox'}
+                          name={editingSchedule ? 'waste_type' : undefined}
+                          checked={checked}
+                          onChange={e => {
+                            const nextWasteTypes = editingSchedule
+                              ? [value]
+                              : e.target.checked
+                              ? [...form.waste_types, value]
+                              : form.waste_types.filter(wasteType => wasteType !== value)
+                            setForm({ ...form, waste_types: nextWasteTypes })
+                          }}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>{label}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
               {[
-                { label: 'Waste Type', key: 'waste_type', options: [['biodegradable','Biodegradable'],['non_biodegradable','Non-biodegradable'],['residual','Residual'],['hazardous','Hazardous']] },
                 { label: 'Collection Day', key: 'collection_day', options: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(day => [day, day]) },
                 { label: 'Frequency', key: 'frequency', options: [['weekly','Weekly'],['bi_weekly','Bi-weekly']] },
               ].map(({ label, key, options }) => (

@@ -100,6 +100,16 @@ class NotificationLogListView(APIView):
         return Response(serializer.data)
 
 
+class NotificationLogDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        deleted, _ = NotificationLog.objects.filter(user=request.user, pk=pk, read_at__isnull=False).delete()
+        if not deleted:
+            return Response({'error': 'Read notification not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class NotificationMarkReadView(APIView):
     permission_classes = [IsAuthenticated]
 
