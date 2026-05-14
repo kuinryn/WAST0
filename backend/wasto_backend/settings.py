@@ -3,9 +3,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'fallback-secret-key')
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
@@ -25,7 +24,7 @@ INSTALLED_APPS = [
     'accounts',
     'barangays',
     'schedules',
-    'weather',
+    'weather.apps.WeatherConfig',
     'audit',
 ]
 
@@ -102,3 +101,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 OPENWEATHERMAP_API_KEY = os.getenv('OPENWEATHERMAP_API_KEY', '')
 FIREBASE_SERVER_KEY = os.getenv('FIREBASE_SERVER_KEY', '')
+FIREBASE_CREDENTIALS_PATH = os.getenv('FIREBASE_CREDENTIALS_PATH')
+WEATHER_REFRESH_MINUTES = int(os.getenv('WEATHER_REFRESH_MINUTES', '60'))

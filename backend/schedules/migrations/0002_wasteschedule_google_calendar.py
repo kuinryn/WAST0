@@ -10,6 +10,11 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddField(
             model_name='wasteschedule',
+            name='updated_at',
+            field=models.DateTimeField(auto_now=True),
+        ),
+        migrations.AddField(
+            model_name='wasteschedule',
             name='google_calendar_event_id',
             field=models.CharField(blank=True, max_length=255, null=True),
         ),
@@ -22,10 +27,5 @@ class Migration(migrations.Migration):
             model_name='wasteschedule',
             name='last_synced_at',
             field=models.DateTimeField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name='wasteschedule',
-            name='updated_at',
-            field=models.DateTimeField(auto_now=True),
         ),
     ]

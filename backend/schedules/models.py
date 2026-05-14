@@ -28,8 +28,6 @@ class WasteSchedule(models.Model):
     created_by = models.ForeignKey('accounts.CustomUser', on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
-    # Google Calendar integration
     google_calendar_event_id = models.CharField(max_length=255, blank=True, null=True)
     calendar_sync_enabled = models.BooleanField(default=True)
     last_synced_at = models.DateTimeField(null=True, blank=True)
