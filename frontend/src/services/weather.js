@@ -3,9 +3,9 @@
 // Falls back to backend proxy if needed
 
 const OWM_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY || ''
-const DEFAULT_CITY = import.meta.env.VITE_DEFAULT_CITY || 'Quezon City'
-const DEFAULT_LAT = import.meta.env.VITE_DEFAULT_LAT || 14.6760
-const DEFAULT_LON = import.meta.env.VITE_DEFAULT_LON || 121.0437
+const DEFAULT_CITY = import.meta.env.VITE_DEFAULT_CITY || 'Davao City'
+const DEFAULT_LAT = import.meta.env.VITE_DEFAULT_LAT || 7.1907
+const DEFAULT_LON = import.meta.env.VITE_DEFAULT_LON || 125.4553
 
 // Get current weather
 export async function getCurrentWeather(lat = DEFAULT_LAT, lon = DEFAULT_LON) {
@@ -64,6 +64,29 @@ export async function getWeatherForDate(targetDate, lat = DEFAULT_LAT, lon = DEF
     weather: midday.weather,
     wind: midday.wind,
   }
+}
+
+export async function getWeeklyForecast(lat = DEFAULT_LAT, lon = DEFAULT_LON) {
+  const forecast = await get5DayForecast(lat, lon)
+  const entries = forecast?.list || []
+  const byDate = new Map()
+
+  entries.forEach(entry => {
+    const date = new Date(entry.dt * 1000)
+    const key = date.toISOString().split('T')[0]
+    const hour = date.getHours()
+    const current = byDate.get(key)
+    if (!current || Math.abs(hour - 12) < Math.abs(current.hour - 12)) {
+      byDate.set(key, { entry, hour, date })
+    }
+  })
+
+  return Array.from(byDate.values()).slice(0, 7).map(({ entry, date }) => ({
+    date,
+    temp: Math.round(entry.main?.temp || 0),
+    description: entry.weather?.[0]?.description || 'forecast unavailable',
+    icon: entry.weather?.[0]?.icon,
+  }))
 }
 
 // Check if weather is suitable for collection

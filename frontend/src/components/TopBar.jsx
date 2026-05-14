@@ -67,7 +67,7 @@ export default function TopBar({ title, subtitle }) {
           fontSize: 14,
           flexShrink: 0,
         }}>
-          {(user?.first_name?.[0] || user?.username?.[0] || 'A').toUpperCase()}
+          {(user?.name?.trim()?.[0] || user?.email?.trim()?.[0] || 'U').toUpperCase()}
         </div>
 
         {showNotif && (

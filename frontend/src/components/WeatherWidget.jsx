@@ -1,9 +1,18 @@
 // src/components/WeatherWidget.jsx
+import { useEffect, useState } from 'react'
 import { useWeather } from '../hooks/useWeather'
-import { getWeatherIconUrl } from '../services/weather'
+import { getWeatherIconUrl, getWeeklyForecast } from '../services/weather'
 
 export default function WeatherWidget({ hasTomorrowSchedules = false }) {
   const { current, tomorrow, tomorrowCheck, loading, lastUpdated, refresh } = useWeather()
+  const [weekly, setWeekly] = useState([])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      getWeeklyForecast().then(setWeekly).catch(() => setWeekly([]))
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [])
 
   if (loading) {
     return (
@@ -44,7 +53,7 @@ export default function WeatherWidget({ hasTomorrowSchedules = false }) {
               <span>💧 {humidity}%</span>
               <span>💨 {windSpeed} m/s</span>
               {lastUpdated && (
-                <span>🕐 {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <span>Time {lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()}</span>
               )}
             </div>
           </div>
@@ -116,6 +125,22 @@ export default function WeatherWidget({ hasTomorrowSchedules = false }) {
             {isTomorrowBad ? '⚠️ ALERT' : '✅ READY'}
           </div>
         )}
+      </div>
+
+      <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, padding: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--charcoal)', marginBottom: 10 }}>Weekly Forecast</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(72px, 1fr))', gap: 8 }}>
+          {weekly.map(day => (
+            <div key={day.date.toISOString()} style={{ textAlign: 'center', padding: 8, borderRadius: 10, background: 'var(--green-light)' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--green-dark)' }}>
+                {day.date.toLocaleDateString('en-PH', { weekday: 'short' })}
+              </div>
+              {day.icon && <img src={getWeatherIconUrl(day.icon)} alt={day.description} style={{ width: 34, height: 34, margin: '2px auto' }} />}
+              <div style={{ fontSize: 13, fontWeight: 800 }}>{day.temp}°C</div>
+              <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'capitalize' }}>{day.description}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

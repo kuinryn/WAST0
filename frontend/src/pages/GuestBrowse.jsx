@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getSchedules, getBarangays } from '../services/api'
+import { formatClock } from '../utils/format'
 
 const WASTE_LABELS = {
   biodegradable: { label: 'Biodegradable', icon: '♻️', color: '#065f46', bg: '#d1fae5' },
@@ -133,7 +134,7 @@ export default function GuestBrowse() {
                       <div style={{ fontSize: 13, color: 'var(--muted)' }}>
                         Every {s.frequency === 'bi_weekly' ? 'other ' : ''}{s.collection_day}
                         {' · '}
-                        {s.collection_time ? s.collection_time.slice(0, 5) : ''}
+                        {formatClock(s.collection_time)}
                       </div>
                     </div>
                     <span style={{

@@ -12,7 +12,7 @@ const ROLE_STYLE = {
   resident: { label: 'Resident', color: '#2d7a4f', bg: '#e8f5ee' },
 }
 
-function UserModal({ user: editUser, barangays, onClose, onSave }) {
+function UserModal({ user: editUser, barangays, users, onClose, onSave }) {
   const isNew = !editUser?.id
   const [form, setForm] = useState(editUser || {
     name: '', email: '', password: '', role: 'resident', barangay: '', is_active: true,
@@ -21,6 +21,18 @@ function UserModal({ user: editUser, barangays, onClose, onSave }) {
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   const handleSave = async () => {
+    if (form.role === 'official' && form.barangay && form.is_active) {
+      const hasActiveOfficial = users.some(user => (
+        user.role === 'official'
+        && user.is_active
+        && String(user.barangay || '') === String(form.barangay)
+        && user.id !== editUser?.id
+      ))
+      if (hasActiveOfficial) {
+        toast.error('This barangay already has an active official account.')
+        return
+      }
+    }
     setSaving(true)
     try {
       const payload = { ...form }
@@ -105,6 +117,8 @@ export default function Residents() {
   const [barangays, setBarangays] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [barangayFilter, setBarangayFilter] = useState('')
   const [editUser, setEditUser] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -133,18 +147,68 @@ export default function Residents() {
     finally { setDeleteTarget(null) }
   }
 
-  const filtered = users.filter(u => {
+  const visibleUsers = me?.role === 'official'
+    ? users.filter(u => u.role === 'resident' && String(u.barangay || '') === String(me.barangay || ''))
+    : users
+  const registeredResidentCount = visibleUsers.filter(u => u.role === 'resident').length
+
+  const filtered = visibleUsers.filter(u => {
+    if (roleFilter && u.role !== roleFilter) return false
+    if (barangayFilter && String(u.barangay || '') !== barangayFilter) return false
     if (!search) return true
     const q = search.toLowerCase()
-    return u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.role?.includes(q)
+    return u.name?.toLowerCase().includes(q)
+      || u.email?.toLowerCase().includes(q)
+      || u.role?.includes(q)
+      || u.barangay_name?.toLowerCase().includes(q)
   })
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <TopBar title="👥 Users & Residents" subtitle="Manage all system users" />
+      <TopBar title={me?.role === 'super_admin' ? 'Users' : 'Residents'} subtitle={me?.role === 'super_admin' ? 'Manage all system users' : 'Residents registered in your barangay'} />
       <main style={{ flex: 1, padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <input className="input-field" placeholder="🔍 Search name, email, role…" value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 300 }} />
+        {me?.role === 'official' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+            <div className="card" style={{ padding: '18px 20px' }}>
+              <div style={{
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                background: '#e8f5ee',
+                color: '#2d7a4f',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                marginBottom: 12,
+              }}>
+                RR
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: '#2d7a4f', lineHeight: 1 }}>
+                {loading ? '...' : registeredResidentCount}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                Registered Residents in {me?.barangay_name || 'your barangay'}
+              </div>
+            </div>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input className="input-field" placeholder="Search name, email, role, barangay..." value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 300 }} />
+          {me?.role === 'super_admin' && (
+            <>
+              <select className="input-field" value={roleFilter} onChange={e => setRoleFilter(e.target.value)} style={{ maxWidth: 190 }}>
+                <option value="">All roles</option>
+                <option value="resident">Resident</option>
+                <option value="official">Barangay Official</option>
+                <option value="super_admin">Super Admin</option>
+              </select>
+              <select className="input-field" value={barangayFilter} onChange={e => setBarangayFilter(e.target.value)} style={{ maxWidth: 220 }}>
+                <option value="">All barangays</option>
+                {barangays.map(barangay => <option key={barangay.id} value={barangay.id}>{barangay.name}</option>)}
+              </select>
+            </>
+          )}
           {me?.role === 'super_admin' && (
             <button className="btn-primary" onClick={() => { setEditUser(null); setShowModal(true) }} style={{ marginLeft: 'auto' }}>
               ➕ Add User
@@ -160,7 +224,7 @@ export default function Residents() {
           ) : filtered.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>👥</div>
-              <p>{search ? 'No users match your search' : 'No users found'}</p>
+              <p>{search || roleFilter || barangayFilter ? 'No users match your filters' : 'No users found'}</p>
             </div>
           ) : (
             <table className="data-table">
@@ -210,7 +274,7 @@ export default function Residents() {
       </main>
 
       {showModal && (
-        <UserModal user={editUser} barangays={barangays} onClose={() => setShowModal(false)} onSave={handleSave} />
+        <UserModal user={editUser} barangays={barangays} users={users} onClose={() => setShowModal(false)} onSave={handleSave} />
       )}
 
       {deleteTarget && (

@@ -2,9 +2,10 @@
 // Integrated: v2 design + v1 backend schedule fields (waste_type, collection_day, collection_time, frequency)
 import { useState, useEffect } from 'react'
 import TopBar from '../components/TopBar'
-import { getSchedules, createSchedule, updateSchedule, deleteSchedule, getBarangays } from '../services/api'
+import { getSchedules, createSchedule, updateSchedule, deleteSchedule, getBarangays, updateBarangay, deleteBarangay, updateUser } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
+import { formatClock } from '../utils/format'
 
 const WASTE_TYPES = ['biodegradable', 'non_biodegradable', 'residual', 'hazardous']
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -13,6 +14,38 @@ const WASTE_STYLE = {
   non_biodegradable: { label: 'Non-Biodegradable', icon: '🗑️', bg: '#fef3c7', color: '#92400e' },
   residual: { label: 'Residual', icon: '🪣', bg: '#f3f4f6', color: '#374151' },
   hazardous: { label: 'Hazardous', icon: '⚠️', bg: '#fee2e2', color: '#991b1b' },
+}
+
+function nextDateForDay(dayName) {
+  const targetIndex = DAYS.indexOf(dayName)
+  const now = new Date()
+  const todayIndex = (now.getDay() + 6) % 7
+  const daysUntil = targetIndex >= 0 ? (targetIndex - todayIndex + 7) % 7 : 0
+  const date = new Date(now)
+  date.setDate(now.getDate() + daysUntil)
+  return date
+}
+
+function googleDate(date) {
+  const pad = value => String(value).padStart(2, '0')
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T${pad(date.getHours())}${pad(date.getMinutes())}00`
+}
+
+function buildGoogleCalendarUrl(schedule) {
+  const [hour = '8', minute = '0'] = String(schedule.collection_time || '08:00').split(':')
+  const start = nextDateForDay(schedule.collection_day)
+  start.setHours(Number(hour), Number(minute), 0, 0)
+  const end = new Date(start)
+  end.setHours(start.getHours() + 1)
+  const waste = WASTE_STYLE[schedule.waste_type]?.label || schedule.waste_type || 'Waste'
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `${waste} Collection`,
+    dates: `${googleDate(start)}/${googleDate(end)}`,
+    details: `${waste} waste collection in ${schedule.barangay_name || 'your barangay'}. Frequency: ${schedule.frequency === 'bi_weekly' ? 'Bi-weekly' : 'Weekly'}.`,
+    location: schedule.barangay_name || '',
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
 function ScheduleModal({ schedule, barangays, userBarangay, onClose, onSave }) {
@@ -160,9 +193,15 @@ export default function Schedules() {
   const [barangays, setBarangays] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [dayFilter, setDayFilter] = useState('')
+  const [wasteFilter, setWasteFilter] = useState('')
+  const [barangaySearch, setBarangaySearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [districtFilter, setDistrictFilter] = useState('')
   const [modalSchedule, setModalSchedule] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [editBarangay, setEditBarangay] = useState(null)
 
   const canEdit = user?.role === 'official' || user?.role === 'super_admin'
 
@@ -198,7 +237,47 @@ export default function Schedules() {
     }
   }
 
+  const handleBarangaySave = async () => {
+    try {
+      const { data } = await updateBarangay(editBarangay.id, {
+        name: editBarangay.name,
+        district: editBarangay.district,
+      })
+      setBarangays(p => p.map(b => b.id === data.id ? data : b))
+      toast.success('Barangay updated')
+      setEditBarangay(null)
+    } catch {
+      toast.error('Failed to update barangay')
+    }
+  }
+
+  const handleBarangayDeactivate = async (barangay) => {
+    if (!barangay.official_id) {
+      toast.error('This barangay has no active official account.')
+      return
+    }
+    try {
+      await updateUser(barangay.official_id, { is_active: false })
+      setBarangays(p => p.map(b => b.id === barangay.id ? { ...b, official_status: 'Inactive', official_name: '', official_id: null } : b))
+      toast.success('Barangay official deactivated')
+    } catch {
+      toast.error('Failed to deactivate official')
+    }
+  }
+
+  const handleBarangayDelete = async (barangay) => {
+    try {
+      await deleteBarangay(barangay.id)
+      setBarangays(p => p.filter(b => b.id !== barangay.id))
+      toast.success('Barangay deleted')
+    } catch {
+      toast.error('Failed to delete barangay')
+    }
+  }
+
   const filtered = schedules.filter(s => {
+    if (dayFilter && s.collection_day !== dayFilter) return false
+    if (wasteFilter && s.waste_type !== wasteFilter) return false
     if (!search) return true
     const q = search.toLowerCase()
     return (
@@ -207,6 +286,90 @@ export default function Schedules() {
       s.barangay_name?.toLowerCase().includes(q)
     )
   })
+
+  const districts = [...new Set(barangays.map(barangay => barangay.district).filter(Boolean))]
+  const filteredBarangays = barangays.filter(barangay => {
+    if (statusFilter && barangay.official_status !== statusFilter) return false
+    if (districtFilter && barangay.district !== districtFilter) return false
+    if (!barangaySearch) return true
+    const q = barangaySearch.toLowerCase()
+    return barangay.name?.toLowerCase().includes(q)
+      || barangay.district?.toLowerCase().includes(q)
+      || barangay.official_name?.toLowerCase().includes(q)
+  })
+
+  if (user?.role === 'super_admin') {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <TopBar title="Barangays" subtitle="Manage barangay records and official account status" />
+        <main style={{ flex: 1, padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              className="input-field"
+              placeholder="Search barangay, district, official..."
+              value={barangaySearch}
+              onChange={e => setBarangaySearch(e.target.value)}
+              style={{ maxWidth: 320 }}
+            />
+            <select className="input-field" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ maxWidth: 190 }}>
+              <option value="">All statuses</option>
+              <option value="Active">Active account</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+            <select className="input-field" value={districtFilter} onChange={e => setDistrictFilter(e.target.value)} style={{ maxWidth: 190 }}>
+              <option value="">All districts</option>
+              {districts.map(district => <option key={district} value={district}>{district}</option>)}
+            </select>
+          </div>
+          <div className="card" style={{ overflow: 'hidden' }}>
+            {loading ? (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
+                <div className="spinner" style={{ margin: '0 auto 12px' }} /> Loading barangays...
+              </div>
+            ) : filteredBarangays.length === 0 ? (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>No barangays match your filters.</div>
+            ) : (
+              <table className="data-table">
+                <thead><tr><th>Barangay</th><th>District</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {filteredBarangays.map(barangay => (
+                    <tr key={barangay.id}>
+                      <td style={{ fontWeight: 700 }}>{barangay.name}{barangay.official_name && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{barangay.official_name}</div>}</td>
+                      <td style={{ color: 'var(--muted)' }}>{barangay.district || '-'}</td>
+                      <td><span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: barangay.official_status === 'Active' ? '#d1fae5' : '#f3f4f6', color: barangay.official_status === 'Active' ? '#065f46' : '#6b7280' }}>{barangay.official_status === 'Active' ? 'Active account' : 'Inactive'}</span></td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button onClick={() => setEditBarangay(barangay)} style={{ background: '#e0f2fe', color: '#0369a1', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Edit</button>
+                          <button onClick={() => handleBarangayDeactivate(barangay)} style={{ background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Deactivate</button>
+                          <button onClick={() => handleBarangayDelete(barangay)} style={{ background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </main>
+
+        {editBarangay && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+            <div style={{ background: 'white', borderRadius: 20, padding: 28, maxWidth: 420, width: '90%' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 18 }}>Edit Barangay</h3>
+              <label style={{ fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 5 }}>Barangay</label>
+              <input className="input-field" value={editBarangay.name} onChange={e => setEditBarangay({ ...editBarangay, name: e.target.value })} style={{ marginBottom: 12 }} />
+              <label style={{ fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 5 }}>District</label>
+              <input className="input-field" value={editBarangay.district || ''} onChange={e => setEditBarangay({ ...editBarangay, district: e.target.value })} />
+              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                <button className="btn-secondary" onClick={() => setEditBarangay(null)} style={{ flex: 1, justifyContent: 'center' }}>Cancel</button>
+                <button className="btn-primary" onClick={handleBarangaySave} style={{ flex: 1, justifyContent: 'center' }}>Save</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -221,6 +384,14 @@ export default function Schedules() {
             onChange={e => setSearch(e.target.value)}
             style={{ maxWidth: 300 }}
           />
+          <select className="input-field" value={dayFilter} onChange={e => setDayFilter(e.target.value)} style={{ maxWidth: 180 }}>
+            <option value="">All days</option>
+            {DAYS.map(day => <option key={day} value={day}>{day}</option>)}
+          </select>
+          <select className="input-field" value={wasteFilter} onChange={e => setWasteFilter(e.target.value)} style={{ maxWidth: 220 }}>
+            <option value="">All waste types</option>
+            {WASTE_TYPES.map(type => <option key={type} value={type}>{WASTE_STYLE[type]?.label || type}</option>)}
+          </select>
           {canEdit && (
             <button className="btn-primary" onClick={openAdd} style={{ marginLeft: 'auto' }}>
               ➕ New Schedule
@@ -236,8 +407,8 @@ export default function Schedules() {
           ) : filtered.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>📭</div>
-              <p>{search ? 'No schedules match your search' : 'No schedules yet'}</p>
-              {canEdit && !search && (
+              <p>{search || dayFilter || wasteFilter ? 'No schedules match your filters' : 'No schedules yet'}</p>
+              {canEdit && !search && !dayFilter && !wasteFilter && (
                 <button className="btn-primary" onClick={openAdd} style={{ marginTop: 16 }}>
                   ➕ Add First Schedule
                 </button>
@@ -252,6 +423,7 @@ export default function Schedules() {
                   <th>Time</th>
                   <th>Frequency</th>
                   {user?.role === 'super_admin' && <th>Barangay</th>}
+                  {user?.role === 'resident' && <th>Calendar</th>}
                   {canEdit && <th>Actions</th>}
                 </tr>
               </thead>
@@ -267,13 +439,26 @@ export default function Schedules() {
                         </span>
                       </td>
                       <td style={{ fontWeight: 600 }}>{s.collection_day}</td>
-                      <td>{s.collection_time?.slice(0, 5) || '—'}</td>
+                      <td>{formatClock(s.collection_time)}</td>
                       <td>
                         <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#e8f5ee', color: 'var(--green-dark)' }}>
                           {s.frequency === 'bi_weekly' ? 'Bi-weekly' : 'Weekly'}
                         </span>
                       </td>
                       {user?.role === 'super_admin' && <td style={{ fontSize: 12, color: 'var(--muted)' }}>{s.barangay_name || s.barangay}</td>}
+                      {user?.role === 'resident' && (
+                        <td>
+                          <a
+                            href={buildGoogleCalendarUrl(s)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn-secondary"
+                            style={{ padding: '6px 10px', fontSize: 12, textDecoration: 'none' }}
+                          >
+                            Add to Google Calendar
+                          </a>
+                        </td>
+                      )}
                       {canEdit && (
                         <td>
                           <div style={{ display: 'flex', gap: 6 }}>

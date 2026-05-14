@@ -95,8 +95,9 @@ class AdminUserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'password': 'Password is required.'})
         if role == 'official' and not barangay:
             raise serializers.ValidationError({'barangay': 'Barangay is required for barangay officials.'})
-        if role == 'official' and barangay:
-            existing_official = CustomUser.objects.filter(role='official', barangay=barangay)
+        is_active = data.get('is_active', getattr(self.instance, 'is_active', True))
+        if role == 'official' and barangay and is_active:
+            existing_official = CustomUser.objects.filter(role='official', barangay=barangay, is_active=True)
             if self.instance:
                 existing_official = existing_official.exclude(pk=self.instance.pk)
             if existing_official.exists():

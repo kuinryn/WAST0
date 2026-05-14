@@ -4,6 +4,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from barangays.permissions import IsSuperAdmin
+from schedules.permissions import IsOfficialOrSuperAdmin
 from .models import CustomUser
 from .serializers import (
     AdminUserSerializer,
@@ -76,14 +77,18 @@ class FcmTokenView(APIView):
 
 
 class AdminUserListCreateView(APIView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsOfficialOrSuperAdmin]
 
     def get(self, request):
         users = CustomUser.objects.select_related('barangay').all().order_by('name')
+        if request.user.role == 'official':
+            users = users.filter(role='resident', barangay=request.user.barangay)
         serializer = AdminUserSerializer(users, many=True)
         return Response(serializer.data)
 
     def post(self, request):
+        if request.user.role != 'super_admin':
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         serializer = AdminUserSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()

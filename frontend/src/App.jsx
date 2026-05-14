@@ -78,7 +78,7 @@ export default function App() {
             <Route
               path="audit"
               element={
-                <ProtectedRoute allowedRoles={['super_admin', 'official']}>
+                <ProtectedRoute allowedRoles={['super_admin']}>
                   <AuditLogs />
                 </ProtectedRoute>
               }
@@ -94,7 +94,7 @@ export default function App() {
             <Route
               path="reports"
               element={
-                <ProtectedRoute allowedRoles={['super_admin', 'official']}>
+                <ProtectedRoute allowedRoles={['super_admin']}>
                   <Reports />
                 </ProtectedRoute>
               }

@@ -7,8 +7,8 @@ const ALL_NAV = [
   { to: '/dashboard', icon: '🏠', label: 'Dashboard', roles: ['resident', 'official', 'super_admin'] },
   { to: '/schedules', icon: '📅', label: 'Schedules', roles: ['resident', 'official', 'super_admin'] },
   { to: '/residents', icon: '👥', label: 'Residents', roles: ['official', 'super_admin'] },
-  { to: '/reports', icon: '📊', label: 'Reports', roles: ['official', 'super_admin'] },
-  { to: '/audit', icon: '📋', label: 'Audit Logs', roles: ['super_admin', 'official'] },
+  { to: '/reports', icon: '📊', label: 'Reports', roles: ['super_admin'] },
+  { to: '/audit', icon: '📋', label: 'Audit Logs', roles: ['super_admin'] },
   { to: '/settings', icon: '⚙️', label: 'Settings', roles: ['resident', 'official', 'super_admin'] },
 ]
 
@@ -27,7 +27,13 @@ export default function Sidebar({ collapsed, setCollapsed }) {
     navigate('/login')
   }
 
-  const navItems = ALL_NAV.filter(item => !item.roles || item.roles.includes(user?.role))
+  const navItems = ALL_NAV
+    .filter(item => !item.roles || item.roles.includes(user?.role))
+    .map(item => {
+      if (item.to === '/residents' && user?.role === 'super_admin') return { ...item, label: 'Users' }
+      if (item.to === '/schedules' && user?.role === 'super_admin') return { ...item, label: 'Barangays' }
+      return item
+    })
   const roleBadge = ROLE_BADGE[user?.role]
 
   return (

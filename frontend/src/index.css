@@ -216,10 +216,42 @@ html, body {
 
 /* Table */
 .data-table { width: 100%; border-collapse: collapse; }
+.card:has(.data-table) { overflow-x: auto !important; }
 .data-table th { background: var(--green-light); color: var(--green-dark); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 14px; text-align: left; }
 .data-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 14px; }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tr:hover td { background: var(--cream); }
+
+.dashboard-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  gap: 20px;
+  align-items: start;
+}
+
+.table-toolbar {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 920px) {
+  .dashboard-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .table-toolbar > div:last-child {
+    width: 100%;
+  }
+
+  .table-toolbar .input-field {
+    width: 100% !important;
+  }
+}
 
 /* Spinner */
 .spinner { width: 20px; height: 20px; border: 2.5px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
