@@ -5,21 +5,23 @@ from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
+
 from .models import WasteSchedule
 from .serializers import WasteScheduleSerializer
 from .permissions import IsOfficialOrSuperAdmin, IsOfficialOfBarangay
 from .google_calendar import (
     create_calendar_event,
+    update_calendar_event,
     delete_calendar_event,
     generate_ical_event,
     generate_week_ical,
-    update_calendar_event,
 )
 from weather.services import notify_schedule_change
 
 logger = logging.getLogger(__name__)
+
 
 class WasteScheduleListCreateView(APIView):
     def get_permissions(self):
@@ -48,6 +50,7 @@ class WasteScheduleListCreateView(APIView):
             notify_schedule_change(schedule, 'created')
             return Response(WasteScheduleSerializer(schedule).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class WasteScheduleDetailView(APIView):
     permission_classes = [IsOfficialOrSuperAdmin]
@@ -108,6 +111,7 @@ class WasteScheduleDetailView(APIView):
         schedule.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+
 class ScheduleCalendarSyncView(APIView):
     permission_classes = [IsOfficialOrSuperAdmin]
 
@@ -116,11 +120,9 @@ class ScheduleCalendarSyncView(APIView):
             schedule = WasteSchedule.objects.select_related('barangay').get(pk=pk)
         except WasteSchedule.DoesNotExist:
             return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
-
         perm = IsOfficialOfBarangay()
         if not perm.has_object_permission(request, self, schedule):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
-
         if schedule.google_calendar_event_id:
             success = update_calendar_event(schedule)
         else:
@@ -128,13 +130,11 @@ class ScheduleCalendarSyncView(APIView):
             success = bool(event_id)
             if success:
                 schedule.google_calendar_event_id = event_id
-
         if not success:
             return Response(
-                {'error': 'Failed to sync with Google Calendar. Check Google Calendar configuration.'},
+                {'error': 'Failed to sync with Google Calendar. Check configuration.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-
         schedule.last_synced_at = timezone.now()
         schedule.save(update_fields=['google_calendar_event_id', 'last_synced_at'])
         return Response({
@@ -142,6 +142,7 @@ class ScheduleCalendarSyncView(APIView):
             'event_id': schedule.google_calendar_event_id,
             'synced_at': schedule.last_synced_at,
         })
+
 
 class ScheduleICalDownloadView(APIView):
     permission_classes = [AllowAny]
@@ -151,11 +152,12 @@ class ScheduleICalDownloadView(APIView):
             schedule = WasteSchedule.objects.select_related('barangay').get(pk=pk)
         except WasteSchedule.DoesNotExist:
             return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-        filename = f'wasto-{schedule.barangay.name}-{schedule.waste_type}.ics'
+        waste_label = schedule.waste_type.replace('_', '-')
+        filename = f'wasto-{schedule.barangay.name}-{waste_label}.ics'
         response = HttpResponse(generate_ical_event(schedule), content_type='text/calendar; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
+
 
 class BarangayWeekICalView(APIView):
     permission_classes = [AllowAny]
@@ -164,14 +166,13 @@ class BarangayWeekICalView(APIView):
         schedules = WasteSchedule.objects.filter(
             barangay__id=barangay_id
         ).select_related('barangay').order_by('collection_day', 'collection_time')
-
         if not schedules.exists():
             return Response({'error': 'No schedules found for this barangay.'}, status=status.HTTP_404_NOT_FOUND)
-
         filename = f'wasto-{schedules.first().barangay.name}-all-schedules.ics'
         response = HttpResponse(generate_week_ical(schedules), content_type='text/calendar; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
+
 
 class BulkCalendarSyncView(APIView):
     permission_classes = [IsOfficialOrSuperAdmin]
@@ -187,7 +188,6 @@ class BulkCalendarSyncView(APIView):
             if not user.barangay:
                 return Response({'error': 'No barangay assigned.'}, status=status.HTTP_400_BAD_REQUEST)
             schedules = WasteSchedule.objects.filter(barangay=user.barangay).select_related('barangay')
-
         synced = 0
         failed = 0
         for schedule in schedules:
@@ -208,7 +208,6 @@ class BulkCalendarSyncView(APIView):
             except Exception as exc:
                 logger.error('Bulk sync error for schedule %s: %s', schedule.id, exc)
                 failed += 1
-
         return Response({
             'message': f'Bulk sync complete: {synced} synced, {failed} failed.',
             'synced': synced,

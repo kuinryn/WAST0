@@ -3,6 +3,7 @@ from django.contrib.auth import authenticate
 from .models import CustomUser
 from barangays.models import Barangay
 
+
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True)
@@ -25,6 +26,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         user = CustomUser.objects.create_user(**validated_data)
         return user
 
+
 class UserLoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
@@ -38,6 +40,7 @@ class UserLoginSerializer(serializers.Serializer):
         data['user'] = user
         return data
 
+
 class UserProfileSerializer(serializers.ModelSerializer):
     barangay_name = serializers.CharField(source='barangay.name', read_only=True)
 
@@ -46,8 +49,28 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'email', 'role', 'barangay', 'barangay_name', 'created_at']
         read_only_fields = fields
 
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    barangay = serializers.PrimaryKeyRelatedField(
+        queryset=Barangay.objects.all(), required=False, allow_null=True
+    )
+    barangay_name = serializers.CharField(source='barangay.name', read_only=True)
+
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'name', 'email', 'role', 'barangay', 'barangay_name', 'created_at']
+        read_only_fields = ['id', 'email', 'role', 'created_at']
+
+    def update(self, instance, validated_data):
+        instance.name = validated_data.get('name', instance.name)
+        instance.barangay = validated_data.get('barangay', instance.barangay)
+        instance.save()
+        return instance
+
+
 class FcmTokenSerializer(serializers.Serializer):
     fcm_token = serializers.CharField(allow_blank=False, trim_whitespace=True)
+
 
 class AdminUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, min_length=8, allow_blank=True)

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import WasteSchedule
 
+
 class WasteScheduleSerializer(serializers.ModelSerializer):
     barangay_name = serializers.CharField(source='barangay.name', read_only=True)
     created_by_name = serializers.CharField(source='created_by.name', read_only=True)

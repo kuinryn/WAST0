@@ -11,7 +11,9 @@ from .serializers import (
     UserRegistrationSerializer,
     UserLoginSerializer,
     UserProfileSerializer,
+    UserProfileUpdateSerializer,
 )
+
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -29,6 +31,7 @@ class RegisterView(APIView):
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
@@ -44,12 +47,21 @@ class LoginView(APIView):
             }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data)
+
+    def patch(self, request):
+        serializer = UserProfileUpdateSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response(UserProfileSerializer(user).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class FcmTokenView(APIView):
     permission_classes = [IsAuthenticated]
@@ -61,6 +73,7 @@ class FcmTokenView(APIView):
             request.user.save(update_fields=['fcm_token'])
             return Response({'message': 'FCM token saved.'}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class AdminUserListCreateView(APIView):
     permission_classes = [IsSuperAdmin]
@@ -76,6 +89,7 @@ class AdminUserListCreateView(APIView):
             user = serializer.save()
             return Response(AdminUserSerializer(user).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class AdminUserDetailView(APIView):
     permission_classes = [IsSuperAdmin]

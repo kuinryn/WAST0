@@ -6,32 +6,32 @@ from datetime import date, datetime, timedelta
 logger = logging.getLogger(__name__)
 
 CALENDAR_ID = os.getenv('GOOGLE_CALENDAR_ID', 'primary')
-DAY_TO_WEEKDAY = {
-    'Monday': 0,
-    'Tuesday': 1,
-    'Wednesday': 2,
-    'Thursday': 3,
-    'Friday': 4,
-    'Saturday': 5,
-    'Sunday': 6,
+
+WASTE_EMOJIS = {
+    'biodegradable': '♻️',
+    'non_biodegradable': '🗑️',
+    'residual': '🪣',
+    'hazardous': '⚠️',
 }
+
+DAY_TO_WEEKDAY = {
+    'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3,
+    'Friday': 4, 'Saturday': 5, 'Sunday': 6,
+}
+
 RRULE_DAYS = {
-    'Monday': 'MO',
-    'Tuesday': 'TU',
-    'Wednesday': 'WE',
-    'Thursday': 'TH',
-    'Friday': 'FR',
-    'Saturday': 'SA',
-    'Sunday': 'SU',
+    'Monday': 'MO', 'Tuesday': 'TU', 'Wednesday': 'WE', 'Thursday': 'TH',
+    'Friday': 'FR', 'Saturday': 'SA', 'Sunday': 'SU',
 }
 
 
 def _get_service():
+    """Build and return a Google Calendar service object."""
     try:
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
     except ImportError:
-        logger.error('Google Calendar dependencies are not installed.')
+        logger.error('Google Calendar dependencies are not installed. Run: pip install google-api-python-client google-auth')
         return None
 
     service_account_file = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE', '')
@@ -49,7 +49,7 @@ def _get_service():
                 scopes=['https://www.googleapis.com/auth/calendar'],
             )
         else:
-            logger.warning('No Google Calendar service account configured.')
+            logger.warning('No Google Calendar service account configured. Set GOOGLE_SERVICE_ACCOUNT_FILE or GOOGLE_SERVICE_ACCOUNT_JSON.')
             return None
         return build('calendar', 'v3', credentials=credentials)
     except Exception as exc:
@@ -58,6 +58,7 @@ def _get_service():
 
 
 def _next_weekday(weekday_num):
+    """Return the next occurrence of the given weekday (0=Monday)."""
     today = date.today()
     days_ahead = weekday_num - today.weekday()
     if days_ahead <= 0:
@@ -82,16 +83,17 @@ def _recurrence_rule(schedule):
 def _build_event(schedule):
     start_dt, end_dt = _schedule_datetimes(schedule)
     waste_label = schedule.waste_type.replace('_', ' ').title()
+    emoji = WASTE_EMOJIS.get(schedule.waste_type, '🗑️')
     barangay_name = schedule.barangay.name if schedule.barangay else 'Barangay'
     return {
-        'summary': f'{waste_label} Collection - Barangay {barangay_name}',
+        'summary': f'{emoji} {waste_label} Collection — Barangay {barangay_name}',
         'description': (
             f'Waste Type: {waste_label}\n'
             f'Barangay: {barangay_name}\n'
             f'Collection Day: {schedule.collection_day}\n'
             f'Frequency: {schedule.frequency.replace("_", "-").title()}\n'
             f'Time: {start_dt.strftime("%I:%M %p")}\n\n'
-            'Managed by Wasto'
+            'Managed by WaST0 — Waste Scheduling & Tracking System'
         ),
         'start': {'dateTime': start_dt.isoformat(), 'timeZone': 'Asia/Manila'},
         'end': {'dateTime': end_dt.isoformat(), 'timeZone': 'Asia/Manila'},
@@ -107,11 +109,13 @@ def _build_event(schedule):
 
 
 def create_calendar_event(schedule):
+    """Create a recurring Google Calendar event. Returns event ID or None."""
     service = _get_service()
     if not service:
         return None
     try:
         event = service.events().insert(calendarId=CALENDAR_ID, body=_build_event(schedule)).execute()
+        logger.info('Created Google Calendar event %s for schedule %s', event.get('id'), schedule.id)
         return event.get('id')
     except Exception as exc:
         logger.error('Failed to create Google Calendar event: %s', exc)
@@ -119,6 +123,7 @@ def create_calendar_event(schedule):
 
 
 def update_calendar_event(schedule):
+    """Update an existing Google Calendar event. Returns True on success."""
     if not schedule.google_calendar_event_id:
         event_id = create_calendar_event(schedule)
         if event_id:
@@ -142,6 +147,7 @@ def update_calendar_event(schedule):
 
 
 def delete_calendar_event(event_id):
+    """Delete a Google Calendar event by ID. Returns True on success."""
     if not event_id:
         return True
     service = _get_service()
@@ -156,18 +162,20 @@ def delete_calendar_event(event_id):
 
 
 def generate_ical_event(schedule):
+    """Generate an iCalendar (.ics) string for a schedule."""
     start_dt, end_dt = _schedule_datetimes(schedule)
     waste_label = schedule.waste_type.replace('_', ' ').title()
+    emoji = WASTE_EMOJIS.get(schedule.waste_type, '🗑️')
     barangay_name = schedule.barangay.name if schedule.barangay else 'Barangay'
     now = datetime.utcnow()
     fmt = '%Y%m%dT%H%M%S'
     return (
         'BEGIN:VCALENDAR\r\n'
         'VERSION:2.0\r\n'
-        'PRODID:-//Wasto//Waste Schedule//EN\r\n'
+        'PRODID:-//WaST0//Waste Schedule//EN\r\n'
         'CALSCALE:GREGORIAN\r\n'
         'METHOD:PUBLISH\r\n'
-        'X-WR-CALNAME:Wasto Waste Collection\r\n'
+        'X-WR-CALNAME:WaST0 Waste Collection\r\n'
         'X-WR-TIMEZONE:Asia/Manila\r\n'
         'BEGIN:VEVENT\r\n'
         f'UID:{schedule.id}@wasto\r\n'
@@ -175,8 +183,9 @@ def generate_ical_event(schedule):
         f'DTSTART;TZID=Asia/Manila:{start_dt.strftime(fmt)}\r\n'
         f'DTEND;TZID=Asia/Manila:{end_dt.strftime(fmt)}\r\n'
         f'{_recurrence_rule(schedule)}\r\n'
-        f'SUMMARY:{waste_label} Collection - Barangay {barangay_name}\r\n'
-        f'DESCRIPTION:Waste Type: {waste_label}\\nBarangay: {barangay_name}\\nManaged by Wasto\r\n'
+        f'SUMMARY:{emoji} {waste_label} Collection - Brgy. {barangay_name}\r\n'
+        f'DESCRIPTION:Waste Type: {waste_label}\\nBarangay: {barangay_name}\\n'
+        f'Frequency: {schedule.frequency.replace("_", "-").title()}\\nManaged by WaST0\r\n'
         'BEGIN:VALARM\r\n'
         'TRIGGER:-PT60M\r\n'
         'ACTION:DISPLAY\r\n'
@@ -188,17 +197,38 @@ def generate_ical_event(schedule):
 
 
 def generate_week_ical(schedules):
+    """Generate a single .ics file containing all schedules."""
     lines = [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
-        'PRODID:-//Wasto//Waste Schedule//EN',
+        'PRODID:-//WaST0//Waste Schedule//EN',
         'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH',
-        'X-WR-CALNAME:Wasto Waste Collection Schedules',
+        'X-WR-CALNAME:WaST0 Waste Collection Schedules',
         'X-WR-TIMEZONE:Asia/Manila',
     ]
+    now = datetime.utcnow()
+    fmt = '%Y%m%dT%H%M%S'
     for schedule in schedules:
-        event = generate_ical_event(schedule).splitlines()
-        lines.extend(event[event.index('BEGIN:VEVENT'):event.index('END:VEVENT') + 1])
+        start_dt, end_dt = _schedule_datetimes(schedule)
+        waste_label = schedule.waste_type.replace('_', ' ').title()
+        emoji = WASTE_EMOJIS.get(schedule.waste_type, '🗑️')
+        barangay_name = schedule.barangay.name if schedule.barangay else 'Barangay'
+        lines += [
+            'BEGIN:VEVENT',
+            f'UID:{schedule.id}@wasto',
+            f'DTSTAMP:{now.strftime(fmt)}Z',
+            f'DTSTART;TZID=Asia/Manila:{start_dt.strftime(fmt)}',
+            f'DTEND;TZID=Asia/Manila:{end_dt.strftime(fmt)}',
+            _recurrence_rule(schedule),
+            f'SUMMARY:{emoji} {waste_label} Collection - Brgy. {barangay_name}',
+            f'DESCRIPTION:Waste Type: {waste_label}\\nBarangay: {barangay_name}\\nManaged by WaST0',
+            'BEGIN:VALARM',
+            'TRIGGER:-PT60M',
+            'ACTION:DISPLAY',
+            f'DESCRIPTION:Reminder: {waste_label} collection in 1 hour',
+            'END:VALARM',
+            'END:VEVENT',
+        ]
     lines.append('END:VCALENDAR')
     return '\r\n'.join(lines) + '\r\n'
