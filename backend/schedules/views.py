@@ -2,6 +2,7 @@ import logging
 from datetime import timedelta
 
 from django.http import HttpResponse
+from django.utils.dateparse import parse_date
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -246,6 +247,10 @@ class ScheduleWeatherActionView(APIView):
             reschedule_date = request.data.get('reschedule_date')
             if not reschedule_date:
                 reschedule_date = timezone.localdate() + timedelta(days=2)
+            elif isinstance(reschedule_date, str):
+                reschedule_date = parse_date(reschedule_date)
+                if not reschedule_date:
+                    return Response({'error': 'reschedule_date must be YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
             schedule.reschedule_date = reschedule_date
         else:
             schedule.reschedule_date = None

@@ -2,7 +2,18 @@
 // Integrated: v2 design + v1 backend schedule fields (waste_type, collection_day, collection_time, frequency)
 import { useState, useEffect } from 'react'
 import TopBar from '../components/TopBar'
-import { getSchedules, createSchedule, updateSchedule, deleteSchedule, getBarangays, updateBarangay, deleteBarangay, updateUser } from '../services/api'
+import {
+  getSchedules,
+  createSchedule,
+  updateSchedule,
+  deleteSchedule,
+  getBarangays,
+  updateBarangay,
+  deleteBarangay,
+  updateUser,
+  scheduleWeatherAction,
+  getTomorrowWeatherRecommendation,
+} from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import { formatClock } from '../utils/format'
@@ -24,6 +35,13 @@ function nextDateForDay(dayName) {
   const date = new Date(now)
   date.setDate(now.getDate() + daysUntil)
   return date
+}
+
+const STATUS_STYLE = {
+  scheduled: { label: 'Scheduled', bg: '#e0f2fe', color: '#0369a1' },
+  continued: { label: 'Continued', bg: '#d1fae5', color: '#065f46' },
+  postponed: { label: 'Postponed', bg: '#fef3c7', color: '#92400e' },
+  cancelled: { label: 'Cancelled', bg: '#fee2e2', color: '#991b1b' },
 }
 
 function googleDate(date) {
@@ -202,6 +220,9 @@ export default function Schedules() {
   const [showModal, setShowModal] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [editBarangay, setEditBarangay] = useState(null)
+  const [actionTarget, setActionTarget] = useState(null)
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [weatherRecommendation, setWeatherRecommendation] = useState(null)
 
   const canEdit = user?.role === 'official' || user?.role === 'super_admin'
 
@@ -210,14 +231,22 @@ export default function Schedules() {
     Promise.all([
       getSchedules(params).catch(() => ({ data: [] })),
       canEdit ? getBarangays().catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
-    ]).then(([schedRes, barRes]) => {
+      user?.role === 'official' && user?.barangay
+        ? getTomorrowWeatherRecommendation(user.barangay).catch(() => ({ data: null }))
+        : Promise.resolve({ data: null }),
+    ]).then(([schedRes, barRes, weatherRes]) => {
       setSchedules(Array.isArray(schedRes.data) ? schedRes.data : [])
       setBarangays(Array.isArray(barRes.data) ? barRes.data : [])
+      setWeatherRecommendation(weatherRes.data)
     }).finally(() => setLoading(false))
   }, [user, canEdit])
 
   const openAdd = () => { setModalSchedule(null); setShowModal(true) }
   const openEdit = (s) => { setModalSchedule(s); setShowModal(true) }
+  const openAction = (schedule, action) => {
+    setActionTarget({ schedule, action, weatherRelated: weatherScheduleIds.has(String(schedule.id)) && weatherNeedsAction })
+    setRescheduleDate(schedule.reschedule_date || '')
+  }
 
   const handleSave = (saved, isNew) => {
     if (isNew) setSchedules(p => [...(Array.isArray(saved) ? saved : [saved]), ...p])
@@ -234,6 +263,28 @@ export default function Schedules() {
       toast.error('Failed to delete')
     } finally {
       setDeleteTarget(null)
+    }
+  }
+
+  const handleScheduleAction = async () => {
+    if (!actionTarget) return
+    if (actionTarget.action === 'reschedule' && !rescheduleDate) {
+      toast.error('Please choose a new collection date')
+      return
+    }
+    try {
+      const { data } = await scheduleWeatherAction(actionTarget.schedule.id, {
+        action: actionTarget.action,
+        reschedule_date: actionTarget.action === 'reschedule' ? rescheduleDate : undefined,
+        weather_recommendation: actionTarget.weatherRelated ? actionTarget.action : '',
+      })
+      setSchedules(p => p.map(s => s.id === data.id ? data : s))
+      toast.success(actionTarget.action === 'cancel' ? 'Schedule cancelled and residents notified' : 'Schedule rescheduled and residents notified')
+      setActionTarget(null)
+      setRescheduleDate('')
+    } catch (err) {
+      const msg = err.response?.data ? Object.values(err.response.data).flat().join(' ') : 'Failed to update schedule'
+      toast.error(msg)
     }
   }
 
@@ -286,6 +337,9 @@ export default function Schedules() {
       s.barangay_name?.toLowerCase().includes(q)
     )
   })
+  const weather = weatherRecommendation?.weather
+  const weatherNeedsAction = weather && ['postpone', 'cancel'].includes(weather.recommendation)
+  const weatherScheduleIds = new Set((weatherRecommendation?.schedules || []).map(item => String(item.id)))
 
   const districts = [...new Set(barangays.map(barangay => barangay.district).filter(Boolean))]
   const filteredBarangays = barangays.filter(barangay => {
@@ -376,6 +430,23 @@ export default function Schedules() {
       <TopBar title="📅 Schedules" subtitle="Waste collection schedule management" />
 
       <main style={{ flex: 1, padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {user?.role === 'official' && weatherNeedsAction && (
+          <div className="card" style={{ padding: 18, borderColor: weather.recommendation === 'cancel' ? '#fecaca' : '#fde68a', background: weather.recommendation === 'cancel' ? '#fff1f2' : '#fffbeb' }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: weather.recommendation === 'cancel' ? '#991b1b' : '#92400e' }}>
+                  Weather recommendation: {weather.recommendation === 'cancel' ? 'cancel collection' : 'reschedule or postpone collection'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                  {weather.reason} Affects {weatherRecommendation.schedules?.length || 0} schedule{weatherRecommendation.schedules?.length === 1 ? '' : 's'} tomorrow.
+                </div>
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 800, color: weather.recommendation === 'cancel' ? '#991b1b' : '#92400e' }}>
+                {weather.rain_probability}% rain chance
+              </span>
+            </div>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <input
             className="input-field"
@@ -422,6 +493,7 @@ export default function Schedules() {
                   <th>Day</th>
                   <th>Time</th>
                   <th>Frequency</th>
+                  <th>Status</th>
                   {user?.role === 'super_admin' && <th>Barangay</th>}
                   {user?.role === 'resident' && <th>Calendar</th>}
                   {canEdit && <th>Actions</th>}
@@ -445,6 +517,22 @@ export default function Schedules() {
                           {s.frequency === 'bi_weekly' ? 'Bi-weekly' : 'Weekly'}
                         </span>
                       </td>
+                      <td>
+                        <span style={{
+                          padding: '3px 10px',
+                          borderRadius: 20,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          background: (STATUS_STYLE[s.status] || STATUS_STYLE.scheduled).bg,
+                          color: (STATUS_STYLE[s.status] || STATUS_STYLE.scheduled).color,
+                        }}>
+                          {(STATUS_STYLE[s.status] || STATUS_STYLE.scheduled).label}
+                        </span>
+                        {s.reschedule_date && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>New date: {s.reschedule_date}</div>}
+                        {weatherScheduleIds.has(String(s.id)) && weatherNeedsAction && (
+                          <div style={{ fontSize: 11, color: weather.recommendation === 'cancel' ? '#991b1b' : '#92400e', marginTop: 3, fontWeight: 700 }}>Weather review</div>
+                        )}
+                      </td>
                       {user?.role === 'super_admin' && <td style={{ fontSize: 12, color: 'var(--muted)' }}>{s.barangay_name || s.barangay}</td>}
                       {user?.role === 'resident' && (
                         <td>
@@ -467,6 +555,18 @@ export default function Schedules() {
                               style={{ background: '#e0f2fe', color: '#0369a1', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
                             >
                               Edit
+                            </button>
+                            <button
+                              onClick={() => openAction(s, 'reschedule')}
+                              style={{ background: '#fef3c7', color: '#92400e', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+                            >
+                              Reschedule
+                            </button>
+                            <button
+                              onClick={() => openAction(s, 'cancel')}
+                              style={{ background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+                            >
+                              Cancel
                             </button>
                             <button
                               onClick={() => setDeleteTarget(s)}
@@ -494,6 +594,40 @@ export default function Schedules() {
           onClose={() => setShowModal(false)}
           onSave={handleSave}
         />
+      )}
+
+      {actionTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <div style={{ background: 'white', borderRadius: 20, padding: 28, maxWidth: 420, width: '100%', boxShadow: '0 24px 60px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 8 }}>
+              {actionTarget.action === 'cancel' ? 'Cancel Schedule?' : 'Reschedule Collection'}
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 18 }}>
+              Residents in {actionTarget.schedule.barangay_name || 'this barangay'} will be notified.
+              {actionTarget.weatherRelated ? ' This update will be marked as weather-related.' : ''}
+            </p>
+            {actionTarget.action === 'reschedule' && (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 5 }}>New collection date</label>
+                <input className="input-field" type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)} />
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button className="btn-secondary" onClick={() => setActionTarget(null)} style={{ flex: 1, justifyContent: 'center' }}>Close</button>
+              <button
+                className="btn-primary"
+                onClick={handleScheduleAction}
+                style={{
+                  flex: 1,
+                  justifyContent: 'center',
+                  background: actionTarget.action === 'cancel' ? 'linear-gradient(135deg,#ef4444,#dc2626)' : undefined,
+                }}
+              >
+                {actionTarget.action === 'cancel' ? 'Cancel Schedule' : 'Reschedule'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {deleteTarget && (

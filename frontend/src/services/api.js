@@ -50,6 +50,7 @@ export const getSchedules = (params) => api.get('/schedules/', { params })
 export const createSchedule = (data) => api.post('/schedules/', data)
 export const updateSchedule = (id, data) => api.put(`/schedules/${id}/`, data)
 export const deleteSchedule = (id) => api.delete(`/schedules/${id}/`)
+export const scheduleWeatherAction = (id, data) => api.post(`/schedules/${id}/weather-action/`, data)
 export const getUpcomingSchedules = () => api.get('/schedules/', { params: { upcoming: true } })
 export const getTomorrowSchedules = () => api.get('/schedules/', { params: { tomorrow: true } })
 
@@ -70,6 +71,7 @@ export const getAuditLogs = (params) => api.get('/audit/', { params })
 
 // ── Weather ───────────────────────────────────────────
 export const getWeatherAlerts = (barangayId) => api.get('/weather/alerts/', { params: { barangay: barangayId } })
+export const getTomorrowWeatherRecommendation = (barangayId) => api.get('/weather/tomorrow-recommendation/', { params: { barangay: barangayId } })
 
 // ── Notifications ─────────────────────────────────────
 export const registerFCMToken = (token) => api.post('/auth/fcm-token/', { fcm_token: token })

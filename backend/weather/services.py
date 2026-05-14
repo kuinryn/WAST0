@@ -447,16 +447,20 @@ def notify_schedule_change(schedule, action='updated'):
         title = 'New collection schedule'
     elif action in ['cancel', 'deleted']:
         title = 'Collection schedule cancelled'
+    elif action in ['postpone', 'reschedule']:
+        title = 'Collection schedule rescheduled'
     else:
         title = 'Collection schedule updated'
 
     if action in ['postpone', 'reschedule'] and schedule.reschedule_date:
+        reason = ' due to weather' if schedule.weather_recommendation else ''
         message = (
-            f'{waste_label} collection in {barangay_name} has been rescheduled '
+            f'{waste_label} collection in {barangay_name} has been rescheduled{reason} '
             f'to {schedule.reschedule_date}.'
         )
     elif action in ['cancel', 'deleted']:
-        message = f'{waste_label} collection in {barangay_name} has been cancelled.'
+        reason = ' due to weather' if schedule.weather_recommendation == 'cancel' else ''
+        message = f'{waste_label} collection in {barangay_name} has been cancelled{reason}.'
     elif action == 'continue':
         message = f'{waste_label} collection in {barangay_name} will continue as scheduled.'
     elif action == 'created':
@@ -501,6 +505,46 @@ def notify_schedule_change(schedule, action='updated'):
 
     return {'sent': sent, 'failed': failed, 'total': users.count()}
 
+def send_schedule_reminder(user, schedule):
+    waste_label = schedule.waste_type.replace('_', ' ').title()
+    title = 'Collection schedule tomorrow'
+    message = f'{waste_label} collection is scheduled tomorrow at {schedule.collection_time.strftime("%H:%M")}.'
+    already_sent = NotificationLog.objects.filter(
+        user=user,
+        category='schedule',
+        title=title,
+        message=message,
+        sent_at__date=timezone.localdate(),
+    ).exists()
+    if already_sent:
+        return False
+
+    log_status = 'sent'
+    try:
+        if messaging and user.fcm_token:
+            message_payload = messaging.Message(
+                notification=messaging.Notification(title=title, body=message),
+                data={
+                    'category': 'schedule',
+                    'schedule_id': str(schedule.id),
+                    'status': schedule.status,
+                    'reminder': 'tomorrow',
+                },
+                token=user.fcm_token,
+            )
+            messaging.send(message_payload)
+    except Exception:
+        log_status = 'failed'
+
+    NotificationLog.objects.create(
+        user=user,
+        category='schedule',
+        title=title,
+        message=message,
+        status=log_status,
+    )
+    return True
+
 def ensure_upcoming_schedule_notifications(user):
     if not user.barangay_id or user.role != 'resident':
         return 0
@@ -514,25 +558,22 @@ def ensure_upcoming_schedule_notifications(user):
     )
     created = 0
     for schedule in schedules:
-        waste_label = schedule.waste_type.replace('_', ' ').title()
-        title = 'Collection schedule tomorrow'
-        message = f'{waste_label} collection is scheduled tomorrow at {schedule.collection_time.strftime("%H:%M")}.'
-        already_sent = NotificationLog.objects.filter(
-            user=user,
-            category='schedule',
-            title=title,
-            message=message,
-            sent_at__date=timezone.localdate(),
-        ).exists()
-        if not already_sent:
-            NotificationLog.objects.create(
-                user=user,
-                category='schedule',
-                title=title,
-                message=message,
-                status='sent',
-            )
+        if send_schedule_reminder(user, schedule):
             created += 1
+    return created
+
+def send_tomorrow_schedule_reminders():
+    tomorrow_day = (timezone.localdate() + timedelta(days=1)).strftime('%A')
+    schedules = WasteSchedule.objects.filter(
+        collection_day=tomorrow_day,
+        status__in=['scheduled', 'continued'],
+    ).select_related('barangay').order_by('barangay__name', 'collection_time')
+    created = 0
+    for schedule in schedules:
+        users = CustomUser.objects.filter(barangay=schedule.barangay, role='resident')
+        for user in users:
+            if send_schedule_reminder(user, schedule):
+                created += 1
     return created
 
 # all barangays
