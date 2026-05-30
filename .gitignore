@@ -1,9 +1,21 @@
 # Backend secrets
 backend/.env
+frontend/.env
+.env
 
 # Python generated files
 __pycache__/
 *.py[cod]
+
+# OS generated files
+.DS_Store
+
+# Environments and dependencies
+venv/
+.venv/
+env/
+node_modules/
+dist/
 
 # Local databases and media
 *.sqlite3
