@@ -36,8 +36,9 @@ services:
       - key: WEATHER_REFRESH_MINUTES
         value: "60"
 
-  - type: static
+  - type: web
     name: wasto-frontend
+    runtime: static
     rootDir: frontend
     buildCommand: "npm ci && npm run build"
     staticPublishPath: dist
