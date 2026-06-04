@@ -1,0 +1,70 @@
+databases:
+  - name: wasto-db
+    plan: free
+    databaseName: wasto
+    user: wasto
+
+services:
+  - type: web
+    name: wasto-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --no-input && python manage.py migrate"
+    startCommand: "gunicorn wasto_backend.wsgi:application"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: wasto-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
+      - key: OPENWEATHERMAP_API_KEY
+        sync: false
+      - key: FIREBASE_SERVER_KEY
+        sync: false
+      - key: FIREBASE_CREDENTIALS_PATH
+        sync: false
+      - key: WEATHER_REFRESH_MINUTES
+        value: "60"
+
+  - type: static
+    name: wasto-frontend
+    rootDir: frontend
+    buildCommand: "npm ci && npm run build"
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+      - key: VITE_OPENWEATHER_API_KEY
+        sync: false
+      - key: VITE_DEFAULT_CITY
+        value: Davao City
+      - key: VITE_DEFAULT_LAT
+        value: "7.1907"
+      - key: VITE_DEFAULT_LON
+        value: "125.4553"
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
+      - key: VITE_FIREBASE_VAPID_KEY
+        sync: false

@@ -20,3 +20,4 @@ dist/
 # Local databases and media
 *.sqlite3
 media/
+backend/staticfiles/
