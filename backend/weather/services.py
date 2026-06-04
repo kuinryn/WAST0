@@ -69,7 +69,7 @@ def build_disposal_suggestion(weather_type, severity, has_schedule):
 
 def get_openweather_api_key():
     api_key = settings.OPENWEATHERMAP_API_KEY
-    if not api_key or api_key == 'your-openweathermap-key':
+    if not api_key or api_key in {'your-openweathermap-api-key', 'your-openweather-api-key'}:
         return None
     return api_key
 
