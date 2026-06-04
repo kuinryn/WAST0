@@ -76,6 +76,7 @@ export const getTomorrowWeatherRecommendation = (barangayId) => api.get('/weathe
 // ── Notifications ─────────────────────────────────────
 export const registerFCMToken = (token) => api.post('/auth/fcm-token/', { fcm_token: token })
 export const getNotifications = () => api.get('/notifications/')
+export const markNotificationsRead = (notificationId) => api.post('/notifications/mark-read/', notificationId ? { notification_id: notificationId } : {})
 
 // ── Dashboard ─────────────────────────────────────────
 export const getDashboardStats = () => api.get('/schedules/')
