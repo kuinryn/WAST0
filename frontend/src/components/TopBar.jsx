@@ -95,7 +95,7 @@ export default function TopBar({ title, subtitle }) {
             color: 'var(--green-dark)',
           }}
         >
-          Bell
+          🔔
           {unreadCount > 0 && (
             <span style={{
               position: 'absolute',
